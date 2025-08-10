@@ -43,12 +43,12 @@ func NewService(ctx context.Context) (*Service, error) {
 }
 
 // GenerateDownloadURL converts a Google Drive file ID to a direct download URL
-func GenerateDownloadURL(driveID string) string {
+func (s *Service) GenerateDownloadURL(driveID string) string {
 	return fmt.Sprintf("https://drive.usercontent.google.com/download?id=%s&export=download&authuser=0&confirm=t", driveID)
 }
 
 // ExtractFileIDFromURL extracts the file ID from a Google Drive download URL
-func ExtractFileIDFromURL(url string) string {
+func (s *Service) ExtractFileIDFromURL(url string) string {
 	re := regexp.MustCompile(`id=([a-zA-Z0-9_-]+)`)
 	matches := re.FindStringSubmatch(url)
 	if len(matches) > 1 {
@@ -74,7 +74,7 @@ func (s *Service) GetFiles(query string, mostRecent bool) ([]*drive.File, error)
 }
 
 // GetMostRecentFile gets the most recently modified file from a list
-func GetMostRecentFile(files []*drive.File) *drive.File {
+func (s *Service) GetMostRecentFile(files []*drive.File) *drive.File {
 	if len(files) == 0 {
 		return nil
 	}

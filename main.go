@@ -21,13 +21,13 @@ func main() {
 		log.Fatalf("Error setting up Google Drive: %v", err)
 	}
 
-	m3u8src := sources.NewM3U8Source()
+	m3u8src := sources.NewM3U8Source(gdriveService)
 
 	processor := audio.NewProcessor()
-	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed")
+	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
 	// Get RSS feed and extract episode mapping
-	rssFileID := podcastProcessor.GetRSSFeedID(gdriveService)
+	rssFileID := podcastProcessor.GetRSSFeedID()
 	var episodeMapping map[string]map[string]interface{}
 	if rssFileID != "" {
 		rssContent, err := gdriveService.DownloadFile(rssFileID)
@@ -46,7 +46,7 @@ func main() {
 	}
 
 	// Discover new M3U8 (parse only)
-	fileID, fileName, entries, err := m3u8src.CheckForNewM3U8Files(context.Background(), gdriveService)
+	fileID, fileName, entries, err := m3u8src.CheckForNewM3U8Files(context.Background())
 	if err != nil {
 		log.Fatalf("Error checking M3U8 files: %v", err)
 	}
@@ -141,7 +141,7 @@ func main() {
 		if downloadURL, exists := result["download_url"]; exists && downloadURL != "" {
 			log.Printf("Skipping upload for reused file: %s", result["title"])
 			// Extract drive_file_id from download_url for consistency
-			if driveFileID := gdrive.ExtractFileIDFromURL(downloadURL.(string)); driveFileID != "" {
+			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL.(string)); driveFileID != "" {
 				result["drive_file_id"] = driveFileID
 			}
 			continue
@@ -171,6 +171,6 @@ func main() {
 		log.Fatalf("Failed to upload RSS feed: %v", err)
 	}
 
-	rssDownloadURL := gdrive.GenerateDownloadURL(rssFileID)
+	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
 	fmt.Printf("RSS Feed Download URL: %s\n", rssDownloadURL)
 }

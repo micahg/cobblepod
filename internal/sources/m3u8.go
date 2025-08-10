@@ -23,20 +23,22 @@ type AudioEntry struct {
 }
 
 type M3U8Source struct {
+	drive          *gdrive.Service
 	mutex          sync.RWMutex
 	processedFiles map[string]bool
 }
 
 // NewProcessor creates a new audio processor
-func NewM3U8Source() *M3U8Source {
+func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
 	return &M3U8Source{
+		drive:          driveService,
 		processedFiles: make(map[string]bool),
 	}
 }
 
 // CheckForNewM3U8Files checks for new M3U8 files and processes them
-func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context, driveService *gdrive.Service) (string, string, []AudioEntry, error) {
-	files, err := driveService.GetFiles(config.M3UQuery, true)
+func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context) (string, string, []AudioEntry, error) {
+	files, err := m.drive.GetFiles(config.M3UQuery, true)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to get M3U8 files: %w", err)
 	}
@@ -46,7 +48,7 @@ func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context, driveService *gdr
 		return "", "", nil, nil
 	}
 
-	mostRecentFile := gdrive.GetMostRecentFile(files)
+	mostRecentFile := m.drive.GetMostRecentFile(files)
 	if mostRecentFile == nil {
 		log.Println("No recent M3U8 files found")
 		return "", "", nil, nil
@@ -69,7 +71,7 @@ func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context, driveService *gdr
 	m.processedFiles[fileID] = true
 	m.mutex.Unlock()
 
-	entries, err := m.processM3U8File(ctx, driveService, fileID)
+	entries, err := m.processM3U8File(ctx, fileID)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -77,8 +79,8 @@ func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context, driveService *gdr
 }
 
 // processM3U8File now only downloads and parses the M3U8, returning raw entries (no audio processing)
-func (m *M3U8Source) processM3U8File(ctx context.Context, driveService *gdrive.Service, fileID string) ([]AudioEntry, error) {
-	m3u8Content, err := driveService.DownloadFile(fileID)
+func (m *M3U8Source) processM3U8File(ctx context.Context, fileID string) ([]AudioEntry, error) {
+	m3u8Content, err := m.drive.DownloadFile(fileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download M3U8 file: %w", err)
 	}
