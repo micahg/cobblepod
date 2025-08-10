@@ -63,11 +63,12 @@ type Enclosure struct {
 // RSSProcessor handles RSS feed generation and processing
 type RSSProcessor struct {
 	channelTitle string
+	drive        *gdrive.Service
 }
 
 // NewRSSProcessor creates a new RSS processor
-func NewRSSProcessor(channelTitle string) *RSSProcessor {
-	return &RSSProcessor{channelTitle: channelTitle}
+func NewRSSProcessor(channelTitle string, driveService *gdrive.Service) *RSSProcessor {
+	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
 }
 
 // CreateRSSXML generates RSS XML from processed files
@@ -117,7 +118,7 @@ func (p *RSSProcessor) createItemFromFile(fileData map[string]interface{}) Item 
 	downloadURL := getStringFromMap(fileData, "download_url", "")
 	if downloadURL == "" {
 		if driveFileID := getStringFromMap(fileData, "drive_file_id", ""); driveFileID != "" {
-			downloadURL = gdrive.GenerateDownloadURL(driveFileID)
+			downloadURL = p.drive.GenerateDownloadURL(driveFileID)
 		}
 	}
 	return Item{
@@ -129,8 +130,8 @@ func (p *RSSProcessor) createItemFromFile(fileData map[string]interface{}) Item 
 }
 
 // GetRSSFeedID gets the RSS feed file ID from Google Drive
-func (p *RSSProcessor) GetRSSFeedID(driveService *gdrive.Service) string {
-	files, err := driveService.GetFiles(config.RSSQuery, true)
+func (p *RSSProcessor) GetRSSFeedID() string {
+	files, err := p.drive.GetFiles(config.RSSQuery, true)
 	if err != nil {
 		log.Printf("Error searching for RSS feed: %v", err)
 		return ""
