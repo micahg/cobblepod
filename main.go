@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	"cobblepod/pkg/audio"
-	"cobblepod/pkg/gdrive"
-	"cobblepod/pkg/podcast"
+	"cobblepod/internal/audio"
+	"cobblepod/internal/gdrive"
+	"cobblepod/internal/podcast"
 )
 
 func main() {
