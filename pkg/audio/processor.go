@@ -355,3 +355,23 @@ func (p *Processor) ListJobs() []*ProcessingJob {
 	}
 	return jobs
 }
+
+// CheckFFmpegAvailable checks if FFmpeg is available on the system PATH
+func (p *Processor) CheckFFmpegAvailable() error {
+	cmd := exec.Command("ffmpeg", "-version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("FFmpeg not found on PATH: %w. Please install FFmpeg and ensure it's available in your PATH", err)
+	}
+
+	// Parse version info from output for logging
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+	if len(lines) > 0 && strings.HasPrefix(lines[0], "ffmpeg version") {
+		log.Printf("FFmpeg found: %s", lines[0])
+	} else {
+		log.Println("FFmpeg found and available")
+	}
+
+	return nil
+}
