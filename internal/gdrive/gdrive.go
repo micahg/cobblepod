@@ -19,7 +19,7 @@ import (
 
 // Service wraps the Google Drive API service
 type Service struct {
-	service *drive.Service
+	drive *drive.Service
 }
 
 // NewService creates a new Google Drive service
@@ -39,7 +39,7 @@ func NewService(ctx context.Context) (*Service, error) {
 	}
 
 	log.Printf("Google Drive service initialized with project: %s", config.ProjectID)
-	return &Service{service: service}, nil
+	return &Service{drive: service}, nil
 }
 
 // GenerateDownloadURL converts a Google Drive file ID to a direct download URL
@@ -59,7 +59,7 @@ func (s *Service) ExtractFileIDFromURL(url string) string {
 
 // GetFiles searches for files matching the given query
 func (s *Service) GetFiles(query string, mostRecent bool) ([]*drive.File, error) {
-	call := s.service.Files.List().Q(query).Fields("files(id, name, modifiedTime)")
+	call := s.drive.Files.List().Q(query).Fields("files(id, name, modifiedTime)")
 
 	if mostRecent {
 		call = call.OrderBy("modifiedTime desc").PageSize(1)
@@ -104,7 +104,7 @@ func (s *Service) GetMostRecentFile(files []*drive.File) *drive.File {
 
 // DownloadFile downloads a file and returns its content as a string
 func (s *Service) DownloadFile(fileID string) (string, error) {
-	resp, err := s.service.Files.Get(fileID).Download()
+	resp, err := s.drive.Files.Get(fileID).Download()
 	if err != nil {
 		return "", fmt.Errorf("failed to download file %s: %w", fileID, err)
 	}
@@ -116,6 +116,28 @@ func (s *Service) DownloadFile(fileID string) (string, error) {
 	}
 
 	return string(content), nil
+}
+
+// DownloadFileToTemp downloads a Drive file to a temporary file and returns the local path.
+// Caller is responsible for removing the file when done.
+func (s *Service) DownloadFileToTemp(fileID string) (string, error) {
+	resp, err := s.drive.Files.Get(fileID).Download()
+	if err != nil {
+		return "", fmt.Errorf("failed to download file %s: %w", fileID, err)
+	}
+	defer resp.Body.Close()
+
+	tmpFile, err := os.CreateTemp("", "gdrive-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		return "", fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	return tmpFile.Name(), nil
 }
 
 // UploadFile uploads a file to Google Drive
@@ -131,7 +153,7 @@ func (s *Service) UploadFile(filePath, filename, mimeType string) (string, error
 	}
 
 	// Create the file with content
-	createdFile, err := s.service.Files.Create(fileMetadata).Media(file).Fields("id").Do()
+	createdFile, err := s.drive.Files.Create(fileMetadata).Media(file).Fields("id").Do()
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
@@ -159,10 +181,10 @@ func (s *Service) UploadString(content, filename, mimeType, fileID string) (stri
 
 	if fileID != "" {
 		// Update existing file
-		file, err = s.service.Files.Update(fileID, fileMetadata).Media(reader).Fields("id").Do()
+		file, err = s.drive.Files.Update(fileID, fileMetadata).Media(reader).Fields("id").Do()
 	} else {
 		// Create new file
-		file, err = s.service.Files.Create(fileMetadata).Media(reader).Fields("id").Do()
+		file, err = s.drive.Files.Create(fileMetadata).Media(reader).Fields("id").Do()
 	}
 
 	if err != nil {
@@ -185,6 +207,6 @@ func (s *Service) setFilePermissions(fileID, filename string) error {
 	}
 
 	log.Printf("Setting permissions for %s (ID: %s)", filename, fileID)
-	_, err := s.service.Permissions.Create(fileID, permission).Do()
+	_, err := s.drive.Permissions.Create(fileID, permission).Do()
 	return err
 }
