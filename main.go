@@ -22,6 +22,7 @@ func main() {
 	}
 
 	m3u8src := sources.NewM3U8Source(gdriveService)
+	podcastAddictBackup := sources.NewPodcastAddictBackup(gdriveService)
 
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
@@ -44,6 +45,8 @@ func main() {
 	} else {
 		episodeMapping = make(map[string]map[string]interface{})
 	}
+
+	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
 
 	// Discover new M3U8 (parse only)
 	fileID, fileName, entries, err := m3u8src.CheckForNewM3U8Files(context.Background())

@@ -6,16 +6,19 @@ package sources
 import (
 	"archive/zip"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"cobblepod/internal/gdrive"
+
+	_ "modernc.org/sqlite"
 )
 
 // ListeningProgress represents a single episode listening offset.
@@ -66,7 +69,15 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 	}
 	defer os.Remove(db)
 
-	return nil, nil
+	progress, err := p.queryListeningProgress(db)
+	if err != nil {
+		return nil, fmt.Errorf("querying listening progress: %w", err)
+	}
+
+	// Update the provided episode map with the offsets from progress
+	p.updateEpisodeMap(progress, epMap)
+
+	return progress, nil
 }
 
 // extractBackupDB creates extracts the ZIP-formatted
@@ -115,8 +126,52 @@ func (p *PodcastAddictBackup) extractBackupDB(backupPath string) (string, error)
 	return tempDB.Name(), nil
 }
 
+// queryListeningProgress opens the SQLite database at dbPath in read-only mode
+// and returns the rows from the listening progress query.
+func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]ListeningProgress, error) {
+	// Open read-only using a proper file URI to avoid accidental writes.
+	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
+	dsn := u.String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	defer db.Close()
+
+	// getting rid of e.position_to_resume > 0 gives the actual playlist
+	// also, that order by is pretty useless (why do we need an order).
+	const q = `
+			SELECT 
+				p.name as podcast,
+				e.position_to_resume as offset,
+				e.name as episode
+			FROM episodes e
+			JOIN podcasts p ON p._id = e.podcast_id
+			JOIN ordered_list ol ON ol.id = e._id
+			WHERE e.position_to_resume > 0 AND ol.type = 1`
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]ListeningProgress, 0, 64)
+	for rows.Next() {
+		var lp ListeningProgress
+		if err := rows.Scan(&lp.Podcast, &lp.Offset, &lp.Episode); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		results = append(results, lp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return results, nil
+}
+
 // updateEpisodeMap applies listening progress offsets into the provided episode map.
-// Key format mirrors Python: "<podcast> - <episode>".
+// Key format mirrors Python: "<podcast> - <episode>".5
 func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epMap map[string]map[string]interface{}) {
 	for _, pr := range progress {
 		key := fmt.Sprintf("%s - %s", pr.Podcast, pr.Episode)
@@ -133,10 +188,4 @@ func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epM
 func isPodcastAddictBackupName(name string) bool {
 	lower := strings.ToLower(name)
 	return strings.Contains(lower, "podcastaddict") && filepath.Ext(lower) == ".backup"
-}
-
-// parseModifiedTime tries to parse an RFC3339 time, returns zero time on failure.
-func parseModifiedTime(s string) time.Time {
-	t, _ := time.Parse(time.RFC3339, s)
-	return t
 }
