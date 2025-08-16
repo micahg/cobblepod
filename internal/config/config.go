@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"runtime"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -18,8 +17,8 @@ var (
 	WebhookSecret    = getEnvWithDefault("WEBHOOK_SECRET", uuid.New().String())
 
 	// Audio processing settings
-	DefaultSpeed = 1.5
-	MaxWorkers   = getMaxWorkers()
+	DefaultSpeed     = 1.5
+	MaxFFMPEGWorkers = 4
 
 	// Email settings
 	SMTPServer        = getEnvWithDefault("SMTP_SERVER", "smtp.gmail.com")
@@ -46,14 +45,6 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
-}
-
-func getMaxWorkers() int {
-	cpuCount := runtime.NumCPU()
-	if cpuCount <= 1 {
-		return 1
-	}
-	return cpuCount - 1
 }
 
 // M3UQuery is the query used to search for M3U files in Google Drive

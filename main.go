@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync"
 
 	"cobblepod/internal/audio"
 	"cobblepod/internal/config"
@@ -24,6 +25,23 @@ type downloadResult struct {
 	Idx      int
 	TempPath string
 	Err      error
+}
+
+// ffmpegReq represents a request to process audio with FFmpeg
+type ffmpegReq struct {
+	Idx      int
+	Title    string
+	Duration float64
+	URL      string
+	UUID     string
+	TempPath string
+	Speed    float64
+}
+
+// ffmpegResult represents the result of FFmpeg processing
+type ffmpegResult struct {
+	Result map[string]interface{}
+	Err    error
 }
 
 // downloadWorker consumes URLs from jobs and emits downloadResult on results; closes results when done.
@@ -49,6 +67,47 @@ func downloadWorker(ctx context.Context, proc *audio.Processor, req <-chan downl
 		res <- downloadResult{Idx: job.Idx, TempPath: tmp.Name()}
 		log.Printf("Enqueued download result for index %d", job.Idx)
 	}
+}
+
+// ffmpegWorker processes audio files with FFmpeg
+func ffmpegWorker(ctx context.Context, proc *audio.Processor, jobs <-chan ffmpegReq, results chan<- ffmpegResult) {
+	fileCount := 0
+	for job := range jobs {
+		// Create output file for processed audio
+		outputFile, err := os.CreateTemp("", "processed_*.mp3")
+		if err != nil {
+			results <- ffmpegResult{Err: fmt.Errorf("failed to create output temp file: %w", err)}
+			continue
+		}
+		outputFile.Close()
+
+		// Process with FFmpeg
+		if err := proc.ProcessWithFFMPEG(ctx, job.TempPath, outputFile.Name(), job.Speed); err != nil {
+			os.Remove(job.TempPath)
+			os.Remove(outputFile.Name())
+			results <- ffmpegResult{Err: fmt.Errorf("ffmpeg failed for %s: %w", job.Title, err)}
+			continue
+		}
+
+		// Clean up input temp file
+		os.Remove(job.TempPath)
+
+		// Create result map
+		newDuration := int(job.Duration / job.Speed)
+		result := map[string]interface{}{
+			"title":             job.Title,
+			"original_url":      job.URL,
+			"original_duration": job.Duration,
+			"new_duration":      newDuration,
+			"uuid":              job.UUID,
+			"speed":             job.Speed,
+			"temp_file":         outputFile.Name(),
+		}
+
+		results <- ffmpegResult{Result: result}
+		fileCount++
+	}
+	log.Printf("FFmpeg worker completed processing %d jobs", fileCount)
 }
 
 func main() {
@@ -145,6 +204,18 @@ func main() {
 	// all done sending jobs
 	close(dlRequests)
 
+	// Start FFmpeg worker
+	var wg sync.WaitGroup
+	ffmpegJobs := make(chan ffmpegReq, len(entries))
+	ffmpegResults := make(chan ffmpegResult, len(entries))
+	for i := 0; i < config.MaxFFMPEGWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ffmpegWorker(context.Background(), processor, ffmpegJobs, ffmpegResults)
+		}()
+	}
+
 	for res := range dlResults {
 		// Process the result
 		if res.Err != nil {
@@ -158,25 +229,27 @@ func main() {
 		url := entries[i].URL
 		id := entries[i].UUID
 
-		outputFile := res.TempPath
-
-		if err := processor.ProcessWithFFMPEG(context.Background(), res.TempPath, outputFile, speed); err != nil {
-			os.Remove(res.TempPath)
-			os.Remove(outputFile)
-			log.Printf("ffmpeg failed %s: %v", title, err)
+		// Send to FFmpeg worker
+		ffmpegJobs <- ffmpegReq{
+			Idx:      i,
+			Title:    title,
+			Duration: duration,
+			URL:      url,
+			UUID:     id,
+			TempPath: res.TempPath,
+			Speed:    speed,
+		}
+	}
+	close(ffmpegJobs)
+	wg.Wait()
+	close(ffmpegResults)
+	// Collect FFmpeg results
+	for ffmpegRes := range ffmpegResults {
+		if ffmpegRes.Err != nil {
+			log.Printf("FFmpeg processing failed: %v", ffmpegRes.Err)
 			continue
 		}
-		os.Remove(res.TempPath)
-		newDuration := int(duration / speed)
-		results = append(results, map[string]interface{}{
-			"title":             title,
-			"original_url":      url,
-			"original_duration": duration,
-			"new_duration":      newDuration,
-			"uuid":              id,
-			"speed":             speed,
-			"temp_file":         res.TempPath,
-		})
+		results = append(results, ffmpegRes.Result)
 	}
 
 	if len(results) == 0 {
