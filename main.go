@@ -14,6 +14,43 @@ import (
 	"cobblepod/internal/sources"
 )
 
+type downloadReq struct {
+	Idx int
+	URL string
+}
+
+// downloadResult represents the outcome of downloading a single URL
+type downloadResult struct {
+	Idx      int
+	TempPath string
+	Err      error
+}
+
+// downloadWorker consumes URLs from jobs and emits downloadResult on results; closes results when done.
+func downloadWorker(ctx context.Context, proc *audio.Processor, req <-chan downloadReq, res chan<- downloadResult) {
+	defer close(res)
+	for job := range req {
+		// Create temp file for download
+		tmp, err := os.CreateTemp("", "audio_*.mp3")
+		if err != nil {
+			res <- downloadResult{Idx: job.Idx, Err: fmt.Errorf("create temp: %w", err)}
+			continue
+		}
+		tmp.Close()
+
+		// Perform download
+		if err := proc.DownloadAudioForEntry(ctx, job.URL, tmp.Name()); err != nil {
+			os.Remove(tmp.Name())
+			res <- downloadResult{Idx: job.Idx, Err: fmt.Errorf("download: %w", err)}
+			continue
+		}
+
+		log.Printf("Downloaded %s to %s", job.URL, tmp.Name())
+		res <- downloadResult{Idx: job.Idx, TempPath: tmp.Name()}
+		log.Printf("Enqueued download result for index %d", job.Idx)
+	}
+}
+
 func main() {
 	// Initialize Google Drive service
 	gdriveService, err := gdrive.NewService(context.Background())
@@ -61,10 +98,18 @@ func main() {
 
 	// Process entries locally (moved from processor)
 	var results []map[string]interface{}
-	for _, entry := range entries {
+
+	// Start a single downloader worker with separate job and result channels
+	dlRequests := make(chan downloadReq, len(entries))
+	dlResults := make(chan downloadResult, len(entries))
+	go downloadWorker(context.Background(), processor, dlRequests, dlResults)
+
+	speed := config.DefaultSpeed
+
+	// First pass: reuse check; enqueue downloads for the rest
+	for i, entry := range entries {
 		title := entry.Title
 		duration := entry.Duration
-		speed := config.DefaultSpeed
 		expectedNewDuration := int(duration / speed)
 
 		// Reuse check
@@ -93,42 +138,44 @@ func main() {
 			}
 		}
 
-		// Download original audio
-		tempFile, err := os.CreateTemp("", "audio_*.mp3")
-		if err != nil {
-			log.Fatalf("failed to create temp file: %v", err)
-		}
-		tempFile.Close()
-		if err := processor.DownloadAudioForEntry(context.Background(), entry.URL, tempFile.Name()); err != nil {
-			os.Remove(tempFile.Name())
-			log.Printf("Failed downloading %s: %v", title, err)
+		// Send request and wait for response
+		log.Printf("Enqueuing download for %s (%s)", title, entry.URL)
+		dlRequests <- downloadReq{Idx: i, URL: entry.URL}
+	}
+	// all done sending jobs
+	close(dlRequests)
+
+	for res := range dlResults {
+		// Process the result
+		if res.Err != nil {
+			log.Printf("Download failed: %v", res.Err)
 			continue
 		}
 
-		// Output file
-		outputFile, err := os.CreateTemp("", "processed_*.mp3")
-		if err != nil {
-			os.Remove(tempFile.Name())
-			log.Printf("failed output temp: %v", err)
-			continue
-		}
-		outputFile.Close()
-		if err := processor.ProcessWithFFMPEG(context.Background(), tempFile.Name(), outputFile.Name(), speed); err != nil {
-			os.Remove(tempFile.Name())
-			os.Remove(outputFile.Name())
+		i := res.Idx
+		title := entries[i].Title
+		duration := entries[i].Duration
+		url := entries[i].URL
+		id := entries[i].UUID
+
+		outputFile := res.TempPath
+
+		if err := processor.ProcessWithFFMPEG(context.Background(), res.TempPath, outputFile, speed); err != nil {
+			os.Remove(res.TempPath)
+			os.Remove(outputFile)
 			log.Printf("ffmpeg failed %s: %v", title, err)
 			continue
 		}
-		os.Remove(tempFile.Name())
+		os.Remove(res.TempPath)
 		newDuration := int(duration / speed)
 		results = append(results, map[string]interface{}{
 			"title":             title,
-			"original_url":      entry.URL,
+			"original_url":      url,
 			"original_duration": duration,
 			"new_duration":      newDuration,
-			"uuid":              entry.UUID,
+			"uuid":              id,
 			"speed":             speed,
-			"temp_file":         outputFile.Name(),
+			"temp_file":         res.TempPath,
 		})
 	}
 
