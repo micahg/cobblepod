@@ -45,7 +45,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 		return nil, errors.New("drive service is nil")
 	}
 
-	query := "name contains 'PodcastAddict' and name contains '.backup'"
+	query := "name contains 'PodcastAddict' and name contains '.backup' and trashed = false"
 	files, err := p.drive.GetFiles(query, true)
 	if err != nil {
 		return nil, fmt.Errorf("querying backup files: %w", err)
