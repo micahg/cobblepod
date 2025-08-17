@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 
 	"cobblepod/internal/audio"
@@ -31,7 +30,7 @@ type downloadResult struct {
 type ffmpegReq struct {
 	Idx      int
 	Title    string
-	Duration float64
+	Duration int64
 	URL      string
 	UUID     string
 	TempPath string
@@ -40,7 +39,7 @@ type ffmpegReq struct {
 
 // ffmpegResult represents the result of FFmpeg processing
 type ffmpegResult struct {
-	Result map[string]interface{}
+	Result podcast.ProcessedEpisode
 	Err    error
 }
 
@@ -92,16 +91,16 @@ func ffmpegWorker(ctx context.Context, proc *audio.Processor, jobs <-chan ffmpeg
 		// Clean up input temp file
 		os.Remove(job.TempPath)
 
-		// Create result map
-		newDuration := int(job.Duration / job.Speed)
-		result := map[string]interface{}{
-			"title":             job.Title,
-			"original_url":      job.URL,
-			"original_duration": job.Duration,
-			"new_duration":      newDuration,
-			"uuid":              job.UUID,
-			"speed":             job.Speed,
-			"temp_file":         outputFile.Name(),
+		// Create result struct
+		newDuration := int64(float64(job.Duration) / job.Speed)
+		result := podcast.ProcessedEpisode{
+			Title:            job.Title,
+			OriginalURL:      job.URL,
+			OriginalDuration: job.Duration,
+			NewDuration:      newDuration,
+			UUID:             job.UUID,
+			Speed:            job.Speed,
+			TempFile:         outputFile.Name(),
 		}
 
 		results <- ffmpegResult{Result: result}
@@ -125,6 +124,7 @@ func main() {
 
 	// Get RSS feed and extract episode mapping
 	rssFileID := podcastProcessor.GetRSSFeedID()
+	// todo use a struct (and use int64 so conversions are easier)
 	var episodeMapping map[string]map[string]interface{}
 	if rssFileID != "" {
 		rssContent, err := gdriveService.DownloadFile(rssFileID)
@@ -156,7 +156,7 @@ func main() {
 	log.Printf("Processing %d entries from %s", len(entries), fileName)
 
 	// Process entries locally (moved from processor)
-	var results []map[string]interface{}
+	var results []podcast.ProcessedEpisode
 
 	// Start a single downloader worker with separate job and result channels
 	dlRequests := make(chan downloadReq, len(entries))
@@ -169,26 +169,26 @@ func main() {
 	for i, entry := range entries {
 		title := entry.Title
 		duration := entry.Duration
-		expectedNewDuration := int(duration / speed)
+		expectedNewDuration := int64(float64(duration) / speed)
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
 			if origDur, ok := oldEp["original_duration"]; ok {
 				if length, ok := oldEp["length"]; ok {
-					origDurInt, _ := strconv.Atoi(fmt.Sprintf("%.0f", origDur))
-					lengthInt, _ := strconv.Atoi(fmt.Sprintf("%.0f", length))
-					if origDurInt == int(duration) && lengthInt == expectedNewDuration {
+					origDurInt, _ := origDur.(int)
+					lengthInt, _ := length.(int)
+					if int64(origDurInt) == duration && int64(lengthInt) == expectedNewDuration {
 						log.Printf("Reusing existing processed file: %s", title)
-						result := map[string]interface{}{
-							"title":             title,
-							"original_duration": int(duration),
-							"new_duration":      expectedNewDuration,
-							"uuid":              entry.UUID,
-							"speed":             speed,
-							"download_url":      oldEp["download_url"],
+						result := podcast.ProcessedEpisode{
+							Title:            title,
+							OriginalDuration: duration,
+							NewDuration:      expectedNewDuration,
+							UUID:             entry.UUID,
+							Speed:            speed,
+							DownloadURL:      oldEp["download_url"].(string),
 						}
 						if guid, exists := oldEp["original_guid"]; exists {
-							result["original_guid"] = guid
+							result.OriginalGUID = guid.(string)
 						}
 						results = append(results, result)
 						continue
@@ -261,22 +261,22 @@ func main() {
 	// Upload processed files to Google Drive
 	for i, result := range results {
 		// Skip upload for reused files that already have download_url
-		if downloadURL, exists := result["download_url"]; exists && downloadURL != "" {
-			log.Printf("Skipping upload for reused file: %s", result["title"])
+		if downloadURL := result.DownloadURL; downloadURL != "" {
+			log.Printf("Skipping upload for reused file: %s", result.Title)
 			// Extract drive_file_id from download_url for consistency
-			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL.(string)); driveFileID != "" {
-				result["drive_file_id"] = driveFileID
+			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL); driveFileID != "" {
+				result.DriveFileID = driveFileID
 			}
 			continue
 		}
 
-		log.Printf("Uploading %s to Google Drive", result["title"])
-		tempFile := result["temp_file"].(string)
-		filename := fmt.Sprintf("%s.mp3", result["title"])
+		log.Printf("Uploading %s to Google Drive", result.Title)
+		tempFile := result.TempFile
+		filename := fmt.Sprintf("%s.mp3", result.Title)
 
 		driveFileID, err := gdriveService.UploadFile(tempFile, filename, "audio/mpeg")
 		if err != nil {
-			log.Fatalf("Failed to upload %s to Google Drive: %v", result["title"], err)
+			log.Fatalf("Failed to upload %s to Google Drive: %v", result.Title, err)
 		}
 
 		// Clean up temp file
@@ -284,7 +284,7 @@ func main() {
 			log.Printf("Warning: failed to remove temp file %s: %v", tempFile, err)
 		}
 
-		results[i]["drive_file_id"] = driveFileID
+		results[i].DriveFileID = driveFileID
 	}
 
 	// Create and upload RSS XML

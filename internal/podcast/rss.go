@@ -66,13 +66,27 @@ type RSSProcessor struct {
 	drive        *gdrive.Service
 }
 
+// ProcessedEpisode represents a processed audio episode
+type ProcessedEpisode struct {
+	Title            string  `json:"title"`
+	OriginalURL      string  `json:"original_url,omitempty"`
+	OriginalDuration int64   `json:"original_duration"`
+	NewDuration      int64   `json:"new_duration"`
+	UUID             string  `json:"uuid"`
+	Speed            float64 `json:"speed"`
+	DownloadURL      string  `json:"download_url,omitempty"`
+	OriginalGUID     string  `json:"original_guid,omitempty"`
+	TempFile         string  `json:"temp_file,omitempty"`
+	DriveFileID      string  `json:"drive_file_id,omitempty"`
+}
+
 // NewRSSProcessor creates a new RSS processor
 func NewRSSProcessor(channelTitle string, driveService *gdrive.Service) *RSSProcessor {
 	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
 }
 
 // CreateRSSXML generates RSS XML from processed files
-func (p *RSSProcessor) CreateRSSXML(processedFiles []map[string]interface{}) string {
+func (p *RSSProcessor) CreateRSSXML(processedFiles []ProcessedEpisode) string {
 	rss := RSS{
 		Version: "2.0",
 		Xmlns:   "http://www.itunes.com/dtds/podcast-1.0.dtd",
@@ -103,29 +117,29 @@ func (p *RSSProcessor) CreateRSSXML(processedFiles []map[string]interface{}) str
 	return fmt.Sprintf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>%s%s", "\n", string(xmlBytes))
 }
 
-func (p *RSSProcessor) createItemFromFile(fileData map[string]interface{}) Item {
-	title := getStringFromMap(fileData, "title", "Untitled Episode")
-	guid := getStringFromMap(fileData, "original_guid", "")
+func (p *RSSProcessor) createItemFromFile(fileData ProcessedEpisode) Item {
+	title := fileData.Title
+	guid := fileData.OriginalGUID
 	if guid == "" {
-		if uuid := getStringFromMap(fileData, "uuid", ""); uuid != "" {
-			guid = uuid
+		if fileData.UUID != "" {
+			guid = fileData.UUID
 		} else {
 			guid = fmt.Sprintf("episode-%d", hashString(title))
 		}
 	}
-	originalDuration := getIntFromMap(fileData, "original_duration", 0)
-	newDuration := getIntFromMap(fileData, "new_duration", 0)
-	downloadURL := getStringFromMap(fileData, "download_url", "")
+	originalDuration := fileData.OriginalDuration
+	newDuration := fileData.NewDuration
+	downloadURL := fileData.DownloadURL
 	if downloadURL == "" {
-		if driveFileID := getStringFromMap(fileData, "drive_file_id", ""); driveFileID != "" {
+		if driveFileID := fileData.DriveFileID; driveFileID != "" {
 			downloadURL = p.drive.GenerateDownloadURL(driveFileID)
 		}
 	}
 	return Item{
 		Title:            title,
 		GUID:             GUID{IsPermaLink: "false", Value: guid},
-		OriginalDuration: strconv.Itoa(originalDuration),
-		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.Itoa(newDuration)},
+		OriginalDuration: strconv.FormatInt(originalDuration, 10),
+		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.FormatInt(newDuration, 10)},
 	}
 }
 

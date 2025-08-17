@@ -16,10 +16,10 @@ import (
 
 // AudioEntry represents an entry in an M3U8 playlist
 type AudioEntry struct {
-	Title    string  `json:"title"`
-	Duration float64 `json:"duration"`
-	URL      string  `json:"url"`
-	UUID     string  `json:"uuid"`
+	Title    string `json:"title"`
+	Duration int64  `json:"duration"`
+	URL      string `json:"url"`
+	UUID     string `json:"uuid"`
 }
 
 type M3U8Source struct {
@@ -103,7 +103,7 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 			re := regexp.MustCompile(`^#EXTINF:([0-9.]+),(.+)$`)
 			matches := re.FindStringSubmatch(line)
 			if len(matches) == 3 {
-				duration, err := strconv.ParseFloat(matches[1], 64)
+				duration, err := strconv.ParseInt(matches[1], 10, 64)
 				if err != nil {
 					continue
 				}
