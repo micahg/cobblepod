@@ -124,22 +124,17 @@ func main() {
 
 	// Get RSS feed and extract episode mapping
 	rssFileID := podcastProcessor.GetRSSFeedID()
-	// todo use a struct (and use int64 so conversions are easier)
-	var episodeMapping map[string]map[string]interface{}
+	episodeMapping := make(map[string]podcast.ExistingEpisode)
 	if rssFileID != "" {
 		rssContent, err := gdriveService.DownloadFile(rssFileID)
 		if err != nil {
 			log.Printf("Error downloading RSS feed: %v", err)
-			episodeMapping = make(map[string]map[string]interface{})
 		} else {
 			episodeMapping, err = podcastProcessor.ExtractEpisodeMapping(rssContent)
 			if err != nil {
 				log.Printf("Error extracting episode mapping: %v", err)
-				episodeMapping = make(map[string]map[string]interface{})
 			}
 		}
-	} else {
-		episodeMapping = make(map[string]map[string]interface{})
 	}
 
 	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
@@ -173,27 +168,19 @@ func main() {
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
-			if origDur, ok := oldEp["original_duration"]; ok {
-				if length, ok := oldEp["length"]; ok {
-					origDurInt, _ := origDur.(int)
-					lengthInt, _ := length.(int)
-					if int64(origDurInt) == duration && int64(lengthInt) == expectedNewDuration {
-						log.Printf("Reusing existing processed file: %s", title)
-						result := podcast.ProcessedEpisode{
-							Title:            title,
-							OriginalDuration: duration,
-							NewDuration:      expectedNewDuration,
-							UUID:             entry.UUID,
-							Speed:            speed,
-							DownloadURL:      oldEp["download_url"].(string),
-						}
-						if guid, exists := oldEp["original_guid"]; exists {
-							result.OriginalGUID = guid.(string)
-						}
-						results = append(results, result)
-						continue
-					}
+			if oldEp.OriginalDuration == duration && oldEp.Length == expectedNewDuration {
+				log.Printf("Reusing existing processed file: %s", title)
+				result := podcast.ProcessedEpisode{
+					Title:            title,
+					OriginalDuration: duration,
+					NewDuration:      expectedNewDuration,
+					UUID:             entry.UUID,
+					Speed:            speed,
+					DownloadURL:      oldEp.DownloadURL,
+					OriginalGUID:     oldEp.OriginalGUID,
 				}
+				results = append(results, result)
+				continue
 			}
 		}
 

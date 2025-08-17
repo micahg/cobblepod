@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"cobblepod/internal/gdrive"
+	"cobblepod/internal/podcast"
 
 	_ "modernc.org/sqlite"
 )
@@ -40,7 +41,7 @@ func NewPodcastAddictBackup(drive *gdrive.Service) *PodcastAddictBackup {
 
 // AddListeningProgress locates the most recent backup and will (later) augment epMap with offsets.
 // Currently returns an empty slice as a placeholder.
-func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap map[string]map[string]interface{}) ([]ListeningProgress, error) {
+func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap map[string]podcast.ExistingEpisode) ([]ListeningProgress, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -171,16 +172,13 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 }
 
 // updateEpisodeMap applies listening progress offsets into the provided episode map.
-// Key format mirrors Python: "<podcast> - <episode>".5
-func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epMap map[string]map[string]interface{}) {
+// Key format mirrors Python: "<podcast> - <episode>".
+func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epMap map[string]podcast.ExistingEpisode) {
 	for _, pr := range progress {
 		key := fmt.Sprintf("%s - %s", pr.Podcast, pr.Episode)
-		m := epMap[key]
-		if m == nil {
-			m = make(map[string]interface{})
-			epMap[key] = m
-		}
-		m["offset"] = pr.Offset
+		episode := epMap[key]
+		episode.Offset = pr.Offset
+		epMap[key] = episode
 	}
 }
 

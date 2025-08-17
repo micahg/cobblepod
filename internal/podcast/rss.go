@@ -80,6 +80,15 @@ type ProcessedEpisode struct {
 	DriveFileID      string  `json:"drive_file_id,omitempty"`
 }
 
+// ExistingEpisode represents an episode from existing RSS feed or backup data
+type ExistingEpisode struct {
+	DownloadURL      string `json:"download_url"`
+	Length           int64  `json:"length"`
+	OriginalDuration int64  `json:"original_duration"`
+	OriginalGUID     string `json:"original_guid,omitempty"`
+	Offset           int64  `json:"offset,omitempty"` // From PodcastAddict backup
+}
+
 // NewRSSProcessor creates a new RSS processor
 func NewRSSProcessor(channelTitle string, driveService *gdrive.Service) *RSSProcessor {
 	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
@@ -157,56 +166,34 @@ func (p *RSSProcessor) GetRSSFeedID() string {
 }
 
 // ExtractEpisodeMapping extracts episode mapping from RSS content
-func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]map[string]interface{}, error) {
+func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]ExistingEpisode, error) {
 	var rss RSS
 	if err := xml.Unmarshal([]byte(xmlContent), &rss); err != nil {
 		return nil, fmt.Errorf("failed to parse RSS XML: %w", err)
 	}
-	episodeMapping := make(map[string]map[string]interface{})
+
+	episodeMapping := make(map[string]ExistingEpisode)
 	for _, item := range rss.Channel.Items {
 		title := item.Title
 		if title == "" {
 			title = "Untitled Episode"
 		}
-		originalDuration, _ := strconv.Atoi(item.OriginalDuration)
-		length, _ := strconv.Atoi(item.Enclosure.Length)
-		episodeData := map[string]interface{}{
-			"download_url":      item.Enclosure.URL,
-			"length":            length,
-			"original_duration": originalDuration,
+
+		originalDuration, _ := strconv.ParseInt(item.OriginalDuration, 10, 64)
+		length, _ := strconv.ParseInt(item.Enclosure.Length, 10, 64)
+
+		episode := ExistingEpisode{
+			DownloadURL:      item.Enclosure.URL,
+			Length:           length,
+			OriginalDuration: originalDuration,
+			OriginalGUID:     item.GUID.Value,
 		}
-		if item.GUID.Value != "" {
-			episodeData["original_guid"] = item.GUID.Value
-		}
-		episodeMapping[title] = episodeData
+
+		episodeMapping[title] = episode
 	}
 	return episodeMapping, nil
 }
 
-// Helper functions
-func getStringFromMap(m map[string]interface{}, key, defaultValue string) string {
-	if val, exists := m[key]; exists {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return defaultValue
-}
-func getIntFromMap(m map[string]interface{}, key string, defaultValue int) int {
-	if val, exists := m[key]; exists {
-		switch v := val.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case string:
-			if i, err := strconv.Atoi(v); err == nil {
-				return i
-			}
-		}
-	}
-	return defaultValue
-}
 func hashString(s string) int {
 	hash := 0
 	for _, char := range s {
