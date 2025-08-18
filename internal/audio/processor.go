@@ -93,6 +93,7 @@ func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outpu
 	if err != nil {
 		return fmt.Errorf("FFmpeg error: %w, output: %s", err, string(output))
 	}
+	log.Printf("FFmpeg processing completed: %s", outputPath)
 
 	return nil
 }

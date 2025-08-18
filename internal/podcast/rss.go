@@ -43,7 +43,7 @@ type Category struct {
 type Item struct {
 	Title            string    `xml:"title"`
 	GUID             GUID      `xml:"guid"`
-	OriginalDuration string    `xml:"playrunaddict:originalduration"`
+	OriginalDuration string    `xml:"originalduration"`
 	Enclosure        Enclosure `xml:"enclosure"`
 }
 
@@ -66,13 +66,36 @@ type RSSProcessor struct {
 	drive        *gdrive.Service
 }
 
+// ProcessedEpisode represents a processed audio episode
+type ProcessedEpisode struct {
+	Title            string  `json:"title"`
+	OriginalURL      string  `json:"original_url,omitempty"`
+	OriginalDuration int64   `json:"original_duration"`
+	NewDuration      int64   `json:"new_duration"`
+	UUID             string  `json:"uuid"`
+	Speed            float64 `json:"speed"`
+	DownloadURL      string  `json:"download_url,omitempty"`
+	OriginalGUID     string  `json:"original_guid,omitempty"`
+	TempFile         string  `json:"temp_file,omitempty"`
+	DriveFileID      string  `json:"drive_file_id,omitempty"`
+}
+
+// ExistingEpisode represents an episode from existing RSS feed or backup data
+type ExistingEpisode struct {
+	DownloadURL      string `json:"download_url"`
+	Length           int64  `json:"length"`
+	OriginalDuration int64  `json:"original_duration"`
+	OriginalGUID     string `json:"original_guid,omitempty"`
+	Offset           int64  `json:"offset,omitempty"` // From PodcastAddict backup
+}
+
 // NewRSSProcessor creates a new RSS processor
 func NewRSSProcessor(channelTitle string, driveService *gdrive.Service) *RSSProcessor {
 	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
 }
 
 // CreateRSSXML generates RSS XML from processed files
-func (p *RSSProcessor) CreateRSSXML(processedFiles []map[string]interface{}) string {
+func (p *RSSProcessor) CreateRSSXML(processedFiles []ProcessedEpisode) string {
 	rss := RSS{
 		Version: "2.0",
 		Xmlns:   "http://www.itunes.com/dtds/podcast-1.0.dtd",
@@ -103,29 +126,29 @@ func (p *RSSProcessor) CreateRSSXML(processedFiles []map[string]interface{}) str
 	return fmt.Sprintf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>%s%s", "\n", string(xmlBytes))
 }
 
-func (p *RSSProcessor) createItemFromFile(fileData map[string]interface{}) Item {
-	title := getStringFromMap(fileData, "title", "Untitled Episode")
-	guid := getStringFromMap(fileData, "original_guid", "")
+func (p *RSSProcessor) createItemFromFile(fileData ProcessedEpisode) Item {
+	title := fileData.Title
+	guid := fileData.OriginalGUID
 	if guid == "" {
-		if uuid := getStringFromMap(fileData, "uuid", ""); uuid != "" {
-			guid = uuid
+		if fileData.UUID != "" {
+			guid = fileData.UUID
 		} else {
 			guid = fmt.Sprintf("episode-%d", hashString(title))
 		}
 	}
-	originalDuration := getIntFromMap(fileData, "original_duration", 0)
-	newDuration := getIntFromMap(fileData, "new_duration", 0)
-	downloadURL := getStringFromMap(fileData, "download_url", "")
+	originalDuration := fileData.OriginalDuration
+	newDuration := fileData.NewDuration
+	downloadURL := fileData.DownloadURL
 	if downloadURL == "" {
-		if driveFileID := getStringFromMap(fileData, "drive_file_id", ""); driveFileID != "" {
+		if driveFileID := fileData.DriveFileID; driveFileID != "" {
 			downloadURL = p.drive.GenerateDownloadURL(driveFileID)
 		}
 	}
 	return Item{
 		Title:            title,
 		GUID:             GUID{IsPermaLink: "false", Value: guid},
-		OriginalDuration: strconv.Itoa(originalDuration),
-		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.Itoa(newDuration)},
+		OriginalDuration: strconv.FormatInt(originalDuration, 10),
+		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.FormatInt(newDuration, 10)},
 	}
 }
 
@@ -143,56 +166,42 @@ func (p *RSSProcessor) GetRSSFeedID() string {
 }
 
 // ExtractEpisodeMapping extracts episode mapping from RSS content
-func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]map[string]interface{}, error) {
+func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]ExistingEpisode, error) {
 	var rss RSS
 	if err := xml.Unmarshal([]byte(xmlContent), &rss); err != nil {
 		return nil, fmt.Errorf("failed to parse RSS XML: %w", err)
 	}
-	episodeMapping := make(map[string]map[string]interface{})
+
+	episodeMapping := make(map[string]ExistingEpisode)
 	for _, item := range rss.Channel.Items {
 		title := item.Title
 		if title == "" {
 			title = "Untitled Episode"
 		}
-		originalDuration, _ := strconv.Atoi(item.OriginalDuration)
-		length, _ := strconv.Atoi(item.Enclosure.Length)
-		episodeData := map[string]interface{}{
-			"download_url":      item.Enclosure.URL,
-			"length":            length,
-			"original_duration": originalDuration,
+
+		originalDuration, err := strconv.ParseInt(item.OriginalDuration, 10, 64)
+		if err != nil {
+			log.Printf("Warning: invalid original duration for episode '%s': %v", title, err)
+			originalDuration = 0
 		}
-		if item.GUID.Value != "" {
-			episodeData["original_guid"] = item.GUID.Value
+		length, err := strconv.ParseInt(item.Enclosure.Length, 10, 64)
+		if err != nil {
+			log.Printf("Warning: invalid length for episode '%s': %v", title, err)
+			length = 0
 		}
-		episodeMapping[title] = episodeData
+
+		episode := ExistingEpisode{
+			DownloadURL:      item.Enclosure.URL,
+			Length:           length,
+			OriginalDuration: originalDuration,
+			OriginalGUID:     item.GUID.Value,
+		}
+
+		episodeMapping[title] = episode
 	}
 	return episodeMapping, nil
 }
 
-// Helper functions
-func getStringFromMap(m map[string]interface{}, key, defaultValue string) string {
-	if val, exists := m[key]; exists {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return defaultValue
-}
-func getIntFromMap(m map[string]interface{}, key string, defaultValue int) int {
-	if val, exists := m[key]; exists {
-		switch v := val.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case string:
-			if i, err := strconv.Atoi(v); err == nil {
-				return i
-			}
-		}
-	}
-	return defaultValue
-}
 func hashString(s string) int {
 	hash := 0
 	for _, char := range s {
