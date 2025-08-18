@@ -179,8 +179,16 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 			title = "Untitled Episode"
 		}
 
-		originalDuration, _ := strconv.ParseInt(item.OriginalDuration, 10, 64)
-		length, _ := strconv.ParseInt(item.Enclosure.Length, 10, 64)
+		originalDuration, err := strconv.ParseInt(item.OriginalDuration, 10, 64)
+		if err != nil {
+			log.Printf("Warning: invalid original duration for episode '%s': %v", title, err)
+			originalDuration = 0
+		}
+		length, err := strconv.ParseInt(item.Enclosure.Length, 10, 64)
+		if err != nil {
+			log.Printf("Warning: invalid length for episode '%s': %v", title, err)
+			length = 0
+		}
 
 		episode := ExistingEpisode{
 			DownloadURL:      item.Enclosure.URL,
