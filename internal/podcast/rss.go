@@ -43,7 +43,7 @@ type Category struct {
 type Item struct {
 	Title            string    `xml:"title"`
 	GUID             GUID      `xml:"guid"`
-	OriginalDuration string    `xml:"playrunaddict:originalduration"`
+	OriginalDuration string    `xml:"originalduration"`
 	Enclosure        Enclosure `xml:"enclosure"`
 }
 
