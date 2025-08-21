@@ -12,6 +12,7 @@ import (
 	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
 	"cobblepod/internal/sources"
+	"cobblepod/internal/state"
 )
 
 type downloadReq struct {
@@ -121,6 +122,11 @@ func main() {
 
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
+
+	if state, err := state.NewStateManager(context.Background()); err != nil {
+		log.Printf("Failed to connect to state: %v", err)
+	}
+	state.GetState()
 
 	// Get RSS feed and extract episode mapping
 	rssFileID := podcastProcessor.GetRSSFeedID()
