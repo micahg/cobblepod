@@ -2,8 +2,10 @@ package state
 
 import (
 	"context"
-	"log"
+	"encoding/json"
 	"fmt"
+	"log"
+	"time"
 
 	"cobblepod/internal/config"
 
@@ -11,7 +13,7 @@ import (
 )
 
 type CobblepodState struct {
-	value string
+	lastRun time.Time
 }
 type CobblepodStateManager struct {
 	client *redis.Client
@@ -36,8 +38,30 @@ func NewStateManager(ctx context.Context) (*CobblepodStateManager, error) {
 	return &CobblepodStateManager{client: client}, nil
 }
 
-func (state *CobblepodStateManager) GetState() *CobblepodState {
-	return &CobblepodState{
-		value: state.client.Get(context.Background(), "state").Val(),
+func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
+	stateStr, err := sm.client.Get(context.Background(), "state").Result()
+	if err != nil {
+		log.Printf("Error getting state: %v", err)
+		return nil, err
 	}
+
+	var state CobblepodState
+	if err := json.Unmarshal([]byte(stateStr), &state); err != nil {
+		log.Printf("Error unmarshalling state: %v", err)
+		return nil, err
+	}
+	return &state, nil
+}
+
+func (sm *CobblepodStateManager) SaveState(state *CobblepodState) error {
+	stateJSON, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %w", err)
+	}
+
+	err = sm.client.Set(context.Background(), "state", stateJSON, 0).Err()
+	if err != nil {
+		return fmt.Errorf("failed to save state: %w", err)
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"cobblepod/internal/audio"
 	"cobblepod/internal/config"
@@ -123,7 +124,8 @@ func main() {
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
-	if state, err := state.NewStateManager(context.Background()); err != nil {
+	state, err := state.NewStateManager(context.Background())
+	if err != nil {
 		log.Printf("Failed to connect to state: %v", err)
 	}
 	state.GetState()
@@ -142,6 +144,8 @@ func main() {
 			}
 		}
 	}
+
+	startTime := time.Now()
 
 	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
 
@@ -289,4 +293,6 @@ func main() {
 
 	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
 	fmt.Printf("RSS Feed Download URL: %s\n", rssDownloadURL)
+
+	state.SaveState(&state.CobblepodState{lastRun: startTime})
 }
