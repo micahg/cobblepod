@@ -13,8 +13,9 @@ import (
 )
 
 type CobblepodState struct {
-	lastRun time.Time
+	LastRun time.Time
 }
+
 type CobblepodStateManager struct {
 	client *redis.Client
 }
@@ -29,16 +30,23 @@ func NewStateManager(ctx context.Context) (*CobblepodStateManager, error) {
 		DB:       0,
 	})
 
+	sm := &CobblepodStateManager{client: client}
+
 	// Test the connection
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Valkey: %w", err)
+		sm.client = nil
+		return sm, fmt.Errorf("failed to connect to Valkey: %w", err)
 	}
 
-	return &CobblepodStateManager{client: client}, nil
+	return sm, nil
 }
 
 func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
+	if sm.client == nil {
+		return nil, fmt.Errorf("state manager is not connected")
+	}
+
 	stateStr, err := sm.client.Get(context.Background(), "state").Result()
 	if err != nil {
 		log.Printf("Error getting state: %v", err)
@@ -54,6 +62,9 @@ func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
 }
 
 func (sm *CobblepodStateManager) SaveState(state *CobblepodState) error {
+	if sm.client == nil {
+		return fmt.Errorf("state manager is not connected")
+	}
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %w", err)

@@ -124,11 +124,18 @@ func main() {
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
-	state, err := state.NewStateManager(context.Background())
+	stateManager, err := state.NewStateManager(context.Background())
 	if err != nil {
 		log.Printf("Failed to connect to state: %v", err)
 	}
-	state.GetState()
+
+	appState, err := stateManager.GetState()
+	if err == nil {
+		log.Printf("Last run was at: %s", appState.LastRun)
+	} else {
+		log.Printf("Failed to get state: %v", err)
+		log.Printf("Assuming first run")
+	}
 
 	// Get RSS feed and extract episode mapping
 	rssFileID := podcastProcessor.GetRSSFeedID()
@@ -294,5 +301,7 @@ func main() {
 	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
 	fmt.Printf("RSS Feed Download URL: %s\n", rssDownloadURL)
 
-	state.SaveState(&state.CobblepodState{lastRun: startTime})
+	if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+		fmt.Printf("Failed to save state: %v\n", err)
+	}
 }
