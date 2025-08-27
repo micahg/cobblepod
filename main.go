@@ -6,12 +6,14 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"cobblepod/internal/audio"
 	"cobblepod/internal/config"
 	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
 	"cobblepod/internal/sources"
+	"cobblepod/internal/state"
 )
 
 type downloadReq struct {
@@ -122,6 +124,19 @@ func main() {
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
+	stateManager, err := state.NewStateManager(context.Background())
+	if err != nil {
+		log.Printf("Failed to connect to state: %v", err)
+	}
+
+	appState, err := stateManager.GetState()
+	if err == nil {
+		log.Printf("Last run was at: %s", appState.LastRun)
+	} else {
+		log.Printf("Failed to get state: %v", err)
+		log.Printf("Assuming first run")
+	}
+
 	// Get RSS feed and extract episode mapping
 	rssFileID := podcastProcessor.GetRSSFeedID()
 	episodeMapping := make(map[string]podcast.ExistingEpisode)
@@ -137,18 +152,27 @@ func main() {
 		}
 	}
 
+	startTime := time.Now()
+
 	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
 
 	// Discover new M3U8 (parse only)
-	fileID, fileName, entries, err := m3u8src.CheckForNewM3U8Files(context.Background())
+	m3u8File, err := m3u8src.GetLatestM3U8File(context.Background())
 	if err != nil {
-		log.Fatalf("Error checking M3U8 files: %v", err)
+		log.Fatalf("Error getting latest M3U8 file: %v", err)
 	}
-	if fileID == "" || len(entries) == 0 {
-		log.Println("No new M3U8 entries to process")
-		return
+	if m3u8File.ModifiedTime.Before(appState.LastRun) {
+		log.Printf("M3U8 file '%s' is older than last run (file: %s, last run: %s)",
+			m3u8File.File.Name,
+			m3u8File.ModifiedTime.Format(time.RFC3339),
+			appState.LastRun.Format(time.RFC3339))
+		os.Exit(0)
 	}
-	log.Printf("Processing %d entries from %s", len(entries), fileName)
+	entries, err := m3u8src.ProcessM3U8File(context.Background(), m3u8File)
+	if err != nil {
+		log.Fatalf("Error processing %s: %v", m3u8File.FileName, err)
+	}
+	log.Printf("Processing %d entries from %s", len(entries), m3u8File.FileName)
 
 	// Process entries locally (moved from processor)
 	var results []podcast.ProcessedEpisode
@@ -283,4 +307,8 @@ func main() {
 
 	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
 	fmt.Printf("RSS Feed Download URL: %s\n", rssDownloadURL)
+
+	if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+		fmt.Printf("Failed to save state: %v\n", err)
+	}
 }

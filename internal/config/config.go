@@ -29,6 +29,10 @@ var (
 
 	// Polling settings
 	PollInterval = getEnvInt("POLL_INTERVAL", 300)
+
+	// State
+	ValkeyHost = getEnvWithDefault("VALKEY_HOST", "localhost")
+	ValkeyPort = getEnvInt("VALKEY_PORT", 6379)
 )
 
 func getEnvWithDefault(key, defaultValue string) string {

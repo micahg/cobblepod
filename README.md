@@ -37,6 +37,10 @@ This is a Go rewrite of the original Python M3U8 audio processor. It processes M
    export MAX_WORKERS=4
    ```
 
+4. Valkey
+   ```bash
+   docker run -d --name valkey -p 6379:6379 valkey/valkey:8.1.3
+   ```
 ## Usage
 
 Build and run:

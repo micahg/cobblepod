@@ -10,9 +10,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/api/drive/v3"
 )
+
+// M3U8FileInfo contains metadata about an M3U8 file
+type M3U8FileInfo struct {
+	File         *drive.File
+	FileName     string
+	ModifiedTime time.Time
+}
 
 // AudioEntry represents an entry in an M3U8 playlist
 type AudioEntry struct {
@@ -36,58 +45,56 @@ func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
 	}
 }
 
-// CheckForNewM3U8Files checks for new M3U8 files and processes them
-func (m *M3U8Source) CheckForNewM3U8Files(ctx context.Context) (string, string, []AudioEntry, error) {
+// GetLatestM3U8File checks for the most recent M3U8 file and returns metadata
+func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, error) {
 	files, err := m.drive.GetFiles(config.M3UQuery, true)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("failed to get M3U8 files: %w", err)
+		return nil, fmt.Errorf("failed to get M3U8 files: %w", err)
 	}
 
 	if len(files) == 0 {
-		log.Println("No M3U8 files found")
-		return "", "", nil, nil
+		return nil, nil // No files found
 	}
 
 	mostRecentFile := m.drive.GetMostRecentFile(files)
 	if mostRecentFile == nil {
-		log.Println("No recent M3U8 files found")
-		return "", "", nil, nil
+		return nil, nil
 	}
 
-	fileID := mostRecentFile.Id
-	fileName := mostRecentFile.Name
-
-	m.mutex.Lock()
-	if m.processedFiles[fileID] {
-		m.mutex.Unlock()
-		log.Printf("Most recent M3U8 file '%s' already processed", fileName)
-		return "", "", nil, nil
+	// Parse the modified time
+	modifiedTime, err := time.Parse(time.RFC3339, mostRecentFile.ModifiedTime)
+	if err != nil {
+		log.Printf("Warning: couldn't parse modified time for %s: %v", mostRecentFile.Name, err)
+		modifiedTime = time.Time{} // Zero time as fallback
 	}
-	m.mutex.Unlock()
 
-	log.Printf("Found new M3U8 file: %s", fileName)
-	// Mark as seen so we don't reparse repeatedly
+	return &M3U8FileInfo{
+		File:         mostRecentFile,
+		ModifiedTime: modifiedTime,
+		FileName:     mostRecentFile.Name,
+	}, nil
+}
+
+// ProcessM3U8File downloads and parses the M3U8 file
+func (m *M3U8Source) ProcessM3U8File(ctx context.Context, fileInfo *M3U8FileInfo) ([]AudioEntry, error) {
+	fileID := fileInfo.File.Id
+
+	// Mark as processed
 	m.mutex.Lock()
 	m.processedFiles[fileID] = true
 	m.mutex.Unlock()
 
-	entries, err := m.processM3U8File(ctx, fileID)
-	if err != nil {
-		return "", "", nil, err
-	}
-	return fileID, fileName, entries, nil
-}
-
-// processM3U8File now only downloads and parses the M3U8, returning raw entries (no audio processing)
-func (m *M3U8Source) processM3U8File(ctx context.Context, fileID string) ([]AudioEntry, error) {
+	// Download and parse
 	m3u8Content, err := m.drive.DownloadFile(fileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download M3U8 file: %w", err)
 	}
+
 	audioEntries := m.parseM3U8(m3u8Content)
 	if len(audioEntries) == 0 {
 		return nil, fmt.Errorf("no audio files found in M3U8 playlist")
 	}
+
 	log.Printf("Parsed %d audio entries from M3U8", len(audioEntries))
 	return audioEntries, nil
 }
