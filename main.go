@@ -157,15 +157,22 @@ func main() {
 	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
 
 	// Discover new M3U8 (parse only)
-	fileID, fileName, entries, err := m3u8src.CheckForNewM3U8Files(context.Background())
+	m3u8File, err := m3u8src.GetLatestM3U8File(context.Background())
 	if err != nil {
-		log.Fatalf("Error checking M3U8 files: %v", err)
+		log.Fatalf("Error getting latest M3U8 file: %v", err)
 	}
-	if fileID == "" || len(entries) == 0 {
-		log.Println("No new M3U8 entries to process")
-		return
+	if m3u8File.ModifiedTime.Before(appState.LastRun) {
+		log.Printf("M3U8 file '%s' is older than last run (file: %s, last run: %s)",
+			m3u8File.File.Name,
+			m3u8File.ModifiedTime.Format(time.RFC3339),
+			appState.LastRun.Format(time.RFC3339))
+		os.Exit(0)
 	}
-	log.Printf("Processing %d entries from %s", len(entries), fileName)
+	entries, err := m3u8src.ProcessM3U8File(context.Background(), m3u8File)
+	if err != nil {
+		log.Fatalf("Error processing %s: %v", m3u8File.FileName, err)
+	}
+	log.Printf("Processing %d entries from %s", len(entries), m3u8File.FileName)
 
 	// Process entries locally (moved from processor)
 	var results []podcast.ProcessedEpisode

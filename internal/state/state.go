@@ -50,7 +50,7 @@ func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
 	stateStr, err := sm.client.Get(context.Background(), "state").Result()
 	if err != nil {
 		log.Printf("Error getting state: %v", err)
-		return nil, err
+		return &CobblepodState{LastRun: time.Unix(0, 0)}, err
 	}
 
 	var state CobblepodState
