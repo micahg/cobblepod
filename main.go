@@ -369,37 +369,64 @@ func main() {
 	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
 	defer ticker.Stop()
 
+	// Channel for processing jobs - buffered to allow one pending job
+	processingJobs := make(chan string, 1)
+
+	// Start worker goroutine
+	go func() {
+		defer log.Println("Worker shut down")
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Worker shutting down...")
+				return
+			case reason, ok := <-processingJobs:
+				if !ok {
+					// Channel closed
+					return
+				}
+
+				log.Printf("Running %s...", reason)
+				if err := processRun(ctx); err != nil {
+					if err == context.Canceled {
+						log.Println("Processing cancelled")
+						return
+					} else {
+						log.Printf("Error during processing: %v", err)
+					}
+				}
+			}
+		}
+	}()
+
+	// Helper function to enqueue jobs (non-blocking)
+	enqueueProcessing := func(reason string) {
+		select {
+		case processingJobs <- reason:
+			// Successfully enqueued
+		default:
+			log.Printf("Skipping %s - processing queue is full", reason)
+		}
+	}
+
 	log.Printf("Starting cobblepod with %d second polling interval", config.PollInterval)
 
 	// Run once immediately
-	log.Println("Running initial processing...")
-	if err := processRun(ctx); err != nil {
-		if err == context.Canceled {
-			log.Println("Processing cancelled")
-		} else {
-			log.Printf("Error during processing: %v", err)
-		}
-	}
+	enqueueProcessing("initial processing")
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Context cancelled, shutting down...")
+			// Worker will shut down when context is cancelled
 			return
 		case sig := <-sigChan:
 			log.Printf("Received signal %v, shutting down gracefully...", sig)
 			cancel()
 			return
 		case <-ticker.C:
-			log.Println("Running scheduled processing...")
-			if err := processRun(ctx); err != nil {
-				if err == context.Canceled {
-					log.Println("Processing cancelled")
-					return
-				} else {
-					log.Printf("Error during processing: %v", err)
-				}
-			}
+			enqueueProcessing("scheduled processing")
 		}
 	}
 }
