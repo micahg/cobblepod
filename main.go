@@ -402,6 +402,7 @@ func main() {
 	go cobbleWorker(ctx, processingJobs)
 
 	log.Printf("Starting cobblepod with %d second polling interval", config.PollInterval)
+	processingJobs <- struct{}{}
 
 	for {
 		select {
