@@ -117,6 +117,33 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 	}
 }
 
+// cobbleWorker handles processing job requests
+func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Cobble worker shutting down...")
+			return
+		case reason, ok := <-processingJobs:
+			if !ok {
+				// Channel closed
+				log.Println("Processing jobs channel closed, worker exiting")
+				return
+			}
+
+			log.Printf("Running %s...", reason)
+			if err := processRun(ctx); err != nil {
+				if err == context.Canceled {
+					log.Println("Processing cancelled")
+					return
+				} else {
+					log.Printf("Error during processing: %v", err)
+				}
+			}
+		}
+	}
+}
+
 func processRun(ctx context.Context) error {
 	// Initialize Google Drive service
 	gdriveService, err := gdrive.NewService(ctx)
@@ -370,63 +397,28 @@ func main() {
 	defer ticker.Stop()
 
 	// Channel for processing jobs - buffered to allow one pending job
-	processingJobs := make(chan string, 1)
+	processingJobs := make(chan struct{})
 
-	// Start worker goroutine
-	go func() {
-		defer log.Println("Worker shut down")
-
-		for {
-			select {
-			case <-ctx.Done():
-				log.Println("Worker shutting down...")
-				return
-			case reason, ok := <-processingJobs:
-				if !ok {
-					// Channel closed
-					return
-				}
-
-				log.Printf("Running %s...", reason)
-				if err := processRun(ctx); err != nil {
-					if err == context.Canceled {
-						log.Println("Processing cancelled")
-						return
-					} else {
-						log.Printf("Error during processing: %v", err)
-					}
-				}
-			}
-		}
-	}()
-
-	// Helper function to enqueue jobs (non-blocking)
-	enqueueProcessing := func(reason string) {
-		select {
-		case processingJobs <- reason:
-			// Successfully enqueued
-		default:
-			log.Printf("Skipping %s - processing queue is full", reason)
-		}
-	}
+	// Start the processing worker
+	go cobbleWorker(ctx, processingJobs)
 
 	log.Printf("Starting cobblepod with %d second polling interval", config.PollInterval)
-
-	// Run once immediately
-	enqueueProcessing("initial processing")
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Context cancelled, shutting down...")
-			// Worker will shut down when context is cancelled
 			return
 		case sig := <-sigChan:
 			log.Printf("Received signal %v, shutting down gracefully...", sig)
 			cancel()
 			return
 		case <-ticker.C:
-			enqueueProcessing("scheduled processing")
+			select {
+			case processingJobs <- struct{}{}:
+			default:
+				log.Printf("Skipping processing - queue is full")
+			}
 		}
 	}
 }
