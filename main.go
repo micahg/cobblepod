@@ -124,14 +124,13 @@ func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
 		case <-ctx.Done():
 			log.Println("Cobble worker shutting down...")
 			return
-		case reason, ok := <-processingJobs:
+		case _, ok := <-processingJobs:
 			if !ok {
 				// Channel closed
 				log.Println("Processing jobs channel closed, worker exiting")
 				return
 			}
 
-			log.Printf("Running %s...", reason)
 			if err := processRun(ctx); err != nil {
 				if err == context.Canceled {
 					log.Println("Processing cancelled")
