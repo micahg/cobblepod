@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"cobblepod/internal/audio"
@@ -16,19 +18,20 @@ import (
 	"cobblepod/internal/state"
 )
 
+// downloadReq represents a download request
 type downloadReq struct {
 	Idx int
 	URL string
 }
 
-// downloadResult represents the outcome of downloading a single URL
+// downloadResult represents the result of a download
 type downloadResult struct {
 	Idx      int
 	TempPath string
 	Err      error
 }
 
-// ffmpegReq represents a request to process audio with FFmpeg
+// ffmpegReq represents an FFmpeg processing request
 type ffmpegReq struct {
 	Idx      int
 	Title    string
@@ -45,77 +48,106 @@ type ffmpegResult struct {
 	Err    error
 }
 
-// downloadWorker consumes URLs from jobs and emits downloadResult on results; closes results when done.
-func downloadWorker(ctx context.Context, proc *audio.Processor, req <-chan downloadReq, res chan<- downloadResult) {
-	defer close(res)
-	for job := range req {
-		// Create temp file for download
-		tmp, err := os.CreateTemp("", "audio_*.mp3")
-		if err != nil {
-			res <- downloadResult{Idx: job.Idx, Err: fmt.Errorf("create temp: %w", err)}
-			continue
-		}
-		tmp.Close()
-
-		// Perform download
-		if err := proc.DownloadAudioForEntry(ctx, job.URL, tmp.Name()); err != nil {
-			os.Remove(tmp.Name())
-			res <- downloadResult{Idx: job.Idx, Err: fmt.Errorf("download: %w", err)}
-			continue
+// downloadWorker handles download requests
+func downloadWorker(ctx context.Context, processor *audio.Processor, requests <-chan downloadReq, results chan<- downloadResult) {
+	defer close(results)
+	for req := range requests {
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			results <- downloadResult{Idx: req.Idx, Err: ctx.Err()}
+			return
+		default:
 		}
 
-		log.Printf("Downloaded %s to %s", job.URL, tmp.Name())
-		res <- downloadResult{Idx: job.Idx, TempPath: tmp.Name()}
-		log.Printf("Enqueued download result for index %d", job.Idx)
+		tempPath, err := processor.DownloadFile(req.URL)
+		results <- downloadResult{
+			Idx:      req.Idx,
+			TempPath: tempPath,
+			Err:      err,
+		}
 	}
 }
 
-// ffmpegWorker processes audio files with FFmpeg
-func ffmpegWorker(ctx context.Context, proc *audio.Processor, jobs <-chan ffmpegReq, results chan<- ffmpegResult) {
+// ffmpegWorker handles FFmpeg processing requests
+func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan ffmpegReq, results chan<- ffmpegResult) {
 	fileCount := 0
-	for job := range jobs {
-		// Create output file for processed audio
-		outputFile, err := os.CreateTemp("", "processed_*.mp3")
-		if err != nil {
-			results <- ffmpegResult{Err: fmt.Errorf("failed to create output temp file: %w", err)}
-			continue
-		}
-		outputFile.Close()
+	defer func() {
+		log.Printf("FFmpeg worker completed processing %d jobs", fileCount)
+	}()
 
-		// Process with FFmpeg
-		if err := proc.ProcessWithFFMPEG(ctx, job.TempPath, outputFile.Name(), job.Speed); err != nil {
-			os.Remove(job.TempPath)
-			os.Remove(outputFile.Name())
-			results <- ffmpegResult{Err: fmt.Errorf("ffmpeg failed for %s: %w", job.Title, err)}
+	for job := range jobs {
+		fileCount++
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			results <- ffmpegResult{Err: ctx.Err()}
+			return
+		default:
+		}
+
+		log.Printf("Processing audio for %s (%.1fx speed)", job.Title, job.Speed)
+		outputPath, err := processor.ProcessAudio(job.TempPath, job.Speed)
+		if err != nil {
+			log.Printf("Error processing audio for %s: %v", job.Title, err)
+			results <- ffmpegResult{Err: err}
+			// Clean up temp file
+			if cleanupErr := os.Remove(job.TempPath); cleanupErr != nil {
+				log.Printf("Warning: failed to remove temp file %s: %v", job.TempPath, cleanupErr)
+			}
 			continue
 		}
 
 		// Clean up input temp file
-		os.Remove(job.TempPath)
+		if err := os.Remove(job.TempPath); err != nil {
+			log.Printf("Warning: failed to remove temp file %s: %v", job.TempPath, err)
+		}
 
-		// Create result struct
 		newDuration := int64(float64(job.Duration) / job.Speed)
 		result := podcast.ProcessedEpisode{
 			Title:            job.Title,
-			OriginalURL:      job.URL,
 			OriginalDuration: job.Duration,
 			NewDuration:      newDuration,
 			UUID:             job.UUID,
 			Speed:            job.Speed,
-			TempFile:         outputFile.Name(),
+			TempFile:         outputPath,
 		}
 
-		results <- ffmpegResult{Result: result}
-		fileCount++
+		results <- ffmpegResult{Result: result, Err: nil}
 	}
-	log.Printf("FFmpeg worker completed processing %d jobs", fileCount)
 }
 
-func main() {
+// cobbleWorker handles processing job requests
+func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Cobble worker shutting down...")
+			return
+		case _, ok := <-processingJobs:
+			if !ok {
+				// Channel closed
+				log.Println("Processing jobs channel closed, worker exiting")
+				return
+			}
+
+			if err := processRun(ctx); err != nil {
+				if err == context.Canceled {
+					log.Println("Processing cancelled")
+					return
+				} else {
+					log.Printf("Error during processing: %v", err)
+				}
+			}
+		}
+	}
+}
+
+func processRun(ctx context.Context) error {
 	// Initialize Google Drive service
-	gdriveService, err := gdrive.NewService(context.Background())
+	gdriveService, err := gdrive.NewService(ctx)
 	if err != nil {
-		log.Fatalf("Error setting up Google Drive: %v", err)
+		return fmt.Errorf("error setting up Google Drive: %w", err)
 	}
 
 	m3u8src := sources.NewM3U8Source(gdriveService)
@@ -124,17 +156,18 @@ func main() {
 	processor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
-	stateManager, err := state.NewStateManager(context.Background())
+	stateManager, err := state.NewStateManager(ctx)
 	if err != nil {
 		log.Printf("Failed to connect to state: %v", err)
 	}
 
 	appState, err := stateManager.GetState()
-	if err == nil {
-		log.Printf("Last run was at: %s", appState.LastRun)
-	} else {
+	if err != nil {
 		log.Printf("Failed to get state: %v", err)
 		log.Printf("Assuming first run")
+		appState = &state.CobblepodState{}
+	} else {
+		log.Printf("Last run was at: %s", appState.LastRun.Format(time.RFC3339))
 	}
 
 	// Get RSS feed and extract episode mapping
@@ -154,33 +187,46 @@ func main() {
 
 	startTime := time.Now()
 
-	podcastAddictBackup.AddListeningProgress(context.Background(), episodeMapping)
+	podcastAddictBackup.AddListeningProgress(ctx, episodeMapping)
 
 	// Discover new M3U8 (parse only)
-	m3u8File, err := m3u8src.GetLatestM3U8File(context.Background())
+	m3u8File, err := m3u8src.GetLatestM3U8File(ctx)
 	if err != nil {
-		log.Fatalf("Error getting latest M3U8 file: %v", err)
+		return fmt.Errorf("error getting latest M3U8 file: %w", err)
 	}
-	if m3u8File.ModifiedTime.Before(appState.LastRun) {
+	if m3u8File == nil {
+		log.Println("No M3U8 files found")
+		return nil
+	}
+
+	if !appState.LastRun.IsZero() && m3u8File.ModifiedTime.Before(appState.LastRun) {
 		log.Printf("M3U8 file '%s' is older than last run (file: %s, last run: %s)",
 			m3u8File.File.Name,
 			m3u8File.ModifiedTime.Format(time.RFC3339),
 			appState.LastRun.Format(time.RFC3339))
-		os.Exit(0)
+		return nil
 	}
-	entries, err := m3u8src.ProcessM3U8File(context.Background(), m3u8File)
-	if err != nil {
-		log.Fatalf("Error processing %s: %v", m3u8File.FileName, err)
-	}
-	log.Printf("Processing %d entries from %s", len(entries), m3u8File.FileName)
 
-	// Process entries locally (moved from processor)
+	log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
+
+	entries, err := m3u8src.ProcessM3U8File(ctx, m3u8File)
+	if err != nil {
+		return fmt.Errorf("error processing M3U8 file: %w", err)
+	}
+	if len(entries) == 0 {
+		log.Println("No entries found in M3U8 file")
+		return nil
+	}
+
+	log.Printf("Processing %d entries from %s", len(entries), m3u8File.File.Name)
+
+	// Process entries locally
 	var results []podcast.ProcessedEpisode
 
 	// Start a single downloader worker with separate job and result channels
 	dlRequests := make(chan downloadReq, len(entries))
 	dlResults := make(chan downloadResult, len(entries))
-	go downloadWorker(context.Background(), processor, dlRequests, dlResults)
+	go downloadWorker(ctx, processor, dlRequests, dlResults)
 
 	speed := config.DefaultSpeed
 
@@ -223,11 +269,19 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ffmpegWorker(context.Background(), processor, ffmpegJobs, ffmpegResults)
+			ffmpegWorker(ctx, processor, ffmpegJobs, ffmpegResults)
 		}()
 	}
 
 	for res := range dlResults {
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping processing")
+			return ctx.Err()
+		default:
+		}
+
 		// Process the result
 		if res.Err != nil {
 			log.Printf("Download failed: %v", res.Err)
@@ -254,6 +308,7 @@ func main() {
 	close(ffmpegJobs)
 	wg.Wait()
 	close(ffmpegResults)
+
 	// Collect FFmpeg results
 	for ffmpegRes := range ffmpegResults {
 		if ffmpegRes.Err != nil {
@@ -265,12 +320,24 @@ func main() {
 
 	if len(results) == 0 {
 		log.Println("No audio entries processed successfully")
-		return
+		// Still update state to avoid reprocessing the same empty result
+		if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+			log.Printf("Failed to save state: %v", err)
+		}
+		return nil
 	}
 	log.Printf("Processed %d audio files", len(results))
 
 	// Upload processed files to Google Drive
 	for i, result := range results {
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping upload")
+			return ctx.Err()
+		default:
+		}
+
 		// Skip upload for reused files that already have download_url
 		if downloadURL := result.DownloadURL; downloadURL != "" {
 			log.Printf("Skipping upload for reused file: %s", result.Title)
@@ -287,7 +354,7 @@ func main() {
 
 		driveFileID, err := gdriveService.UploadFile(tempFile, filename, "audio/mpeg")
 		if err != nil {
-			log.Fatalf("Failed to upload %s to Google Drive: %v", result.Title, err)
+			return fmt.Errorf("failed to upload %s to Google Drive: %w", result.Title, err)
 		}
 
 		// Clean up temp file
@@ -302,13 +369,55 @@ func main() {
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
 	rssFileID, err = gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", rssFileID)
 	if err != nil {
-		log.Fatalf("Failed to upload RSS feed: %v", err)
+		return fmt.Errorf("failed to upload RSS feed: %w", err)
 	}
 
 	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
-	fmt.Printf("RSS Feed Download URL: %s\n", rssDownloadURL)
+	log.Printf("RSS Feed Download URL: %s", rssDownloadURL)
 
 	if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
-		fmt.Printf("Failed to save state: %v\n", err)
+		log.Printf("Failed to save state: %v", err)
+	}
+
+	return nil
+}
+
+func main() {
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create a ticker for the polling interval
+	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
+	defer ticker.Stop()
+
+	// Channel for processing jobs - buffered to allow one pending job
+	processingJobs := make(chan struct{})
+
+	// Start the processing worker
+	go cobbleWorker(ctx, processingJobs)
+
+	log.Printf("Starting cobblepod with %d second polling interval", config.PollInterval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Context cancelled, shutting down...")
+			return
+		case sig := <-sigChan:
+			log.Printf("Received signal %v, shutting down gracefully...", sig)
+			cancel()
+			return
+		case <-ticker.C:
+			select {
+			case processingJobs <- struct{}{}:
+			default:
+				log.Printf("Skipping processing - queue is full")
+			}
+		}
 	}
 }

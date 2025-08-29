@@ -98,14 +98,44 @@ func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outpu
 	return nil
 }
 
-// DownloadAudioForEntry is a thin wrapper exposing downloadAudioFile
-func (p *Processor) DownloadAudioForEntry(ctx context.Context, url, outputPath string) error {
-	return p.downloadAudioFile(ctx, url, outputPath)
+// DownloadFile downloads a file from URL and returns the temp file path
+func (p *Processor) DownloadFile(url string) (string, error) {
+	// Create temp file
+	tempFile, err := os.CreateTemp("", "cobblepod_*.mp3")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close() // Close it so we can write to it
+
+	// Download to temp file
+	err = p.downloadAudioFile(context.Background(), url, tempPath)
+	if err != nil {
+		os.Remove(tempPath) // Clean up on error
+		return "", err
+	}
+
+	return tempPath, nil
 }
 
-// ProcessWithFFMPEG exposes processAudioWithFFmpeg for external orchestration
-func (p *Processor) ProcessWithFFMPEG(ctx context.Context, inputPath, outputPath string, speed float64) error {
-	return p.processAudioWithFFmpeg(ctx, inputPath, outputPath, speed)
+// ProcessAudio processes audio file with FFmpeg and returns output path
+func (p *Processor) ProcessAudio(inputPath string, speed float64) (string, error) {
+	// Create temp output file
+	outputFile, err := os.CreateTemp("", "cobblepod_processed_*.mp3")
+	if err != nil {
+		return "", fmt.Errorf("failed to create output temp file: %w", err)
+	}
+	outputPath := outputFile.Name()
+	outputFile.Close() // Close it so FFmpeg can write to it
+
+	// Process with FFmpeg
+	err = p.processAudioWithFFmpeg(context.Background(), inputPath, outputPath, speed)
+	if err != nil {
+		os.Remove(outputPath) // Clean up on error
+		return "", err
+	}
+
+	return outputPath, nil
 }
 
 // GetJobStatus returns the status of a specific job
