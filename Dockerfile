@@ -48,7 +48,7 @@ RUN mkdir -p /app/data && \
     chown -R appuser:appgroup /home/appuser/.config/gcloud
 
 # Create volume mount point for gcloud config
-VOLUME ["/home/appuser/.config/gcloud"]
+#VOLUME ["/home/appuser/.config/gcloud"]
 
 # Switch to non-root user
 USER appuser

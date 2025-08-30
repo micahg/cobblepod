@@ -9,7 +9,6 @@ services:
       # Valkey connection (points to the valkey service)
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
-      
       # Polling settings
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
     volumes:
