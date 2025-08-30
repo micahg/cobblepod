@@ -1,4 +1,4 @@
-# Cobblepod - Go Version
+# Cobblepod
 
 This is a Go rewrite of the original Python M3U8 audio processor. It processes M3U8 playlists from Google Drive, downloads and processes audio files at configurable speeds, and generates podcast RSS feeds.
 
@@ -13,10 +13,16 @@ This is a Go rewrite of the original Python M3U8 audio processor. It processes M
 
 ## Requirements
 
-- Go 1.21 or later
-- FFmpeg installed and available in PATH
-- Google Cloud credentials configured
-- Google Drive API access
+- Docker
+- Your Google 
+
+## Running with Docker
+
+```
+docker run -v "$HOME/.config/gcloud:/home/appuser/.config/gcloud" cobblepod
+```
+
+Note, you need to make `$HOME/.config/gcloud/application_default_credentials.json` readable inside the docker container. *THIS IS A SECURITY PROBLEM AND I KNOW IT*. I'm hoping to make a proper auth fix for this in the future (where you'd sign in as a client) -- might not work though because I think google wants a reachable URL. Sadly, device code doesn't work with the google cloud permissions we need 😭
 
 ## Setup
 

@@ -44,3 +44,6 @@ build-all:
 
 # Default target
 all: clean deps check build
+
+image:
+	docker build -t cobblepod:latest .
