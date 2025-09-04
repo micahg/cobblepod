@@ -16,8 +16,8 @@ import (
 	"google.golang.org/api/drive/v3"
 )
 
-// M3U8FileInfo contains metadata about an M3U8 file
-type M3U8FileInfo struct {
+// FileInfo contains metadata about a file (M3U8, backup, etc.)
+type FileInfo struct {
 	File         *drive.File
 	FileName     string
 	ModifiedTime time.Time
@@ -46,7 +46,7 @@ func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
 }
 
 // GetLatestM3U8File checks for the most recent M3U8 file and returns metadata
-func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, error) {
+func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*FileInfo, error) {
 	files, err := m.drive.GetFiles(config.M3UQuery, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get M3U8 files: %w", err)
@@ -68,7 +68,7 @@ func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, erro
 		modifiedTime = time.Time{} // Zero time as fallback
 	}
 
-	return &M3U8FileInfo{
+	return &FileInfo{
 		File:         mostRecentFile,
 		ModifiedTime: modifiedTime,
 		FileName:     mostRecentFile.Name,
@@ -76,7 +76,7 @@ func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, erro
 }
 
 // Process downloads and parses the M3U8 file
-func (m *M3U8Source) Process(ctx context.Context, fileInfo *M3U8FileInfo) ([]AudioEntry, error) {
+func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]AudioEntry, error) {
 	fileID := fileInfo.File.Id
 
 	// Mark as processed

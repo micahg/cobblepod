@@ -13,8 +13,8 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
+	"time"
 
 	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
@@ -37,6 +37,39 @@ type PodcastAddictBackup struct {
 // NewPodcastAddictBackup constructs a new handler.
 func NewPodcastAddictBackup(drive *gdrive.Service) *PodcastAddictBackup {
 	return &PodcastAddictBackup{drive: drive}
+}
+
+// TODO GetLatestBackupFile abd GetLatestM3U8File share a lot of code - normalize them.
+
+// GetLatestBackupFile checks for the most recent backup file and returns metadata
+func (p *PodcastAddictBackup) GetLatestBackupFile(ctx context.Context) (*FileInfo, error) {
+	query := "name contains 'PodcastAddict' and name contains '.backup' and trashed = false"
+	files, err := p.drive.GetFiles(query, true)
+	if err != nil {
+		return nil, fmt.Errorf("querying backup files: %w", err)
+	}
+	if len(files) == 0 {
+		return nil, nil // No backup files found
+	}
+
+	mostRecentFile := p.drive.GetMostRecentFile(files)
+	if mostRecentFile == nil {
+		return nil, nil
+	}
+
+	modifiedTime, err := time.Parse(time.RFC3339, mostRecentFile.ModifiedTime)
+	if err != nil {
+		log.Printf("Error parsing backup modified time: %v", err)
+		modifiedTime = time.Time{} // Zero time as fallback
+	}
+
+	backupInfo := &FileInfo{
+		File:         mostRecentFile,
+		FileName:     mostRecentFile.Name,
+		ModifiedTime: modifiedTime,
+	}
+
+	return backupInfo, nil
 }
 
 // AddListeningProgress locates the most recent backup and will (later) augment epMap with offsets.
@@ -79,6 +112,96 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 	p.updateEpisodeMap(progress, epMap)
 
 	return progress, nil
+}
+
+// Process locates the most recent backup and processes all episodes for independent processing.
+// This is used when processing backup without M3U8 file.
+func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]podcast.ProcessedEpisode, error) {
+	if p.drive == nil {
+		return nil, errors.New("drive service is nil")
+	}
+
+	if backupFile == nil {
+		return nil, errors.New("no backup file provided")
+	}
+
+	log.Printf("Processing PodcastAddict backup: %s (modified %s)", backupFile.FileName, backupFile.ModifiedTime)
+
+	backup, err := p.drive.DownloadFileToTemp(backupFile.File.Id)
+	if err != nil {
+		return nil, fmt.Errorf("downloading backup file: %w", err)
+	}
+	defer os.Remove(backup)
+
+	db, err := p.extractBackupDB(backup)
+	if err != nil {
+		return nil, fmt.Errorf("extracting backup archive: %w", err)
+	}
+	defer os.Remove(db)
+
+	progress, err := p.queryAllEpisodes(db)
+	if err != nil {
+		return nil, fmt.Errorf("querying all episodes: %w", err)
+	}
+
+	// Convert listening progress to processed episodes
+	var results []podcast.ProcessedEpisode
+	for _, pr := range progress {
+		result := podcast.ProcessedEpisode{
+			Title:            pr.Episode,
+			OriginalDuration: 0,   // Will be set during processing
+			NewDuration:      0,   // Will be calculated
+			UUID:             "",  // Will be generated
+			Speed:            1.5, // Default speed from config
+			// Note: TempFile and other fields will be set during actual processing
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// queryAllEpisodes opens the SQLite database at dbPath and returns all episodes
+// without the position_to_resume > 0 filter for independent backup processing.
+func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]ListeningProgress, error) {
+	// Open read-only using a proper file URI to avoid accidental writes.
+	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
+	dsn := u.String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	defer db.Close()
+
+	// Removed e.position_to_resume > 0 to get all episodes in the playlist
+	const q = `
+			SELECT 
+				p.name as podcast,
+				e.position_to_resume as offset,
+				e.name as episode
+			FROM episodes e
+			JOIN podcasts p ON p._id = e.podcast_id
+			JOIN ordered_list ol ON ol.id = e._id
+			WHERE ol.type = 1`
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]ListeningProgress, 0, 64)
+	for rows.Next() {
+		var lp ListeningProgress
+		if err := rows.Scan(&lp.Podcast, &lp.Offset, &lp.Episode); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		results = append(results, lp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return results, nil
 }
 
 // extractBackupDB creates extracts the ZIP-formatted
@@ -180,10 +303,4 @@ func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epM
 		episode.Offset = pr.Offset
 		epMap[key] = episode
 	}
-}
-
-// isPodcastAddictBackupName returns true if filename looks like a PodcastAddict backup.
-func isPodcastAddictBackupName(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.Contains(lower, "podcastaddict") && filepath.Ext(lower) == ".backup"
 }
