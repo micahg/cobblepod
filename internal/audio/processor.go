@@ -100,9 +100,8 @@ func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outpu
 		outputPath,
 	)
 
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-
 	log.Printf("Executing FFmpeg command: %s", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
