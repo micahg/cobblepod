@@ -102,6 +102,25 @@ func (s *Service) GetMostRecentFile(files []*drive.File) *drive.File {
 	return mostRecent
 }
 
+// FileExists checks if a file with the given ID exists on Google Drive
+func (s *Service) FileExists(fileID string) (bool, error) {
+	if fileID == "" {
+		return false, fmt.Errorf("file ID is empty")
+	}
+
+	_, err := s.drive.Files.Get(fileID).Fields("id").Do()
+	if err != nil {
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "File not found") {
+			return false, nil
+		}
+		// Return other errors (network issues, auth problems, etc.)
+		return false, fmt.Errorf("failed to check if file exists: %w", err)
+	}
+
+	return true, nil
+}
+
 // DownloadFile downloads a file and returns its content as a string
 func (s *Service) DownloadFile(fileID string) (string, error) {
 	resp, err := s.drive.Files.Get(fileID).Download()

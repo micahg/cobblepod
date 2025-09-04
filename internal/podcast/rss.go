@@ -202,6 +202,15 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 	return episodeMapping, nil
 }
 
+func (p *RSSProcessor) CanReuseEpisode(oldEp ExistingEpisode, duration, expectedNewDuration int64) bool {
+	fileId := p.drive.ExtractFileIDFromURL(oldEp.DownloadURL)
+	reallyExists, err := p.drive.FileExists(fileId)
+	if err != nil {
+		log.Printf("Error checking if file exists: %v", err)
+	}
+	return reallyExists && oldEp.OriginalDuration == duration && oldEp.Length == expectedNewDuration
+}
+
 func hashString(s string) int {
 	hash := 0
 	for _, char := range s {
