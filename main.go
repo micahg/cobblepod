@@ -271,7 +271,7 @@ func processRun(ctx context.Context) error {
 
 	log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
 
-	entries, err := m3u8src.ProcessM3U8File(ctx, m3u8File)
+	entries, err := m3u8src.Process(ctx, m3u8File)
 	if err != nil {
 		return fmt.Errorf("error processing M3U8 file: %w", err)
 	}

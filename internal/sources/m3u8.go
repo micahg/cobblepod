@@ -75,8 +75,8 @@ func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, erro
 	}, nil
 }
 
-// ProcessM3U8File downloads and parses the M3U8 file
-func (m *M3U8Source) ProcessM3U8File(ctx context.Context, fileInfo *M3U8FileInfo) ([]AudioEntry, error) {
+// Process downloads and parses the M3U8 file
+func (m *M3U8Source) Process(ctx context.Context, fileInfo *M3U8FileInfo) ([]AudioEntry, error) {
 	fileID := fileInfo.File.Id
 
 	// Mark as processed
