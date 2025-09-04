@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -78,16 +79,29 @@ func (p *Processor) downloadAudioFile(ctx context.Context, url, outputPath strin
 }
 
 // processAudioWithFFmpeg processes audio with FFmpeg
-func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outputPath string, speed float64) error {
-	cmd := exec.CommandContext(ctx,
-		"ffmpeg",
+func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outputPath string, speed float64, offset int64) error {
+	args := []string{"ffmpeg"}
+
+	// Add seek offset if non-zero
+	if offset > 0 {
+		d := time.Duration(offset) * time.Millisecond
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		seconds := int(d.Seconds()) % 60
+		hms := fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+		args = append(args, "-ss", hms)
+	}
+
+	// Add remaining arguments
+	args = append(args,
 		"-i", inputPath,
 		"-filter:a", fmt.Sprintf("atempo=%.1f", speed),
 		"-y",
 		outputPath,
 	)
 
-	log.Printf("Starting FFmpeg processing with %.1fx speed...", speed)
+	log.Printf("Executing FFmpeg command: %s", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -119,7 +133,7 @@ func (p *Processor) DownloadFile(url string) (string, error) {
 }
 
 // ProcessAudio processes audio file with FFmpeg and returns output path
-func (p *Processor) ProcessAudio(inputPath string, speed float64) (string, error) {
+func (p *Processor) ProcessAudio(inputPath string, speed float64, offset int64) (string, error) {
 	// Create temp output file
 	outputFile, err := os.CreateTemp("", "cobblepod_processed_*.mp3")
 	if err != nil {
@@ -129,7 +143,7 @@ func (p *Processor) ProcessAudio(inputPath string, speed float64) (string, error
 	outputFile.Close() // Close it so FFmpeg can write to it
 
 	// Process with FFmpeg
-	err = p.processAudioWithFFmpeg(context.Background(), inputPath, outputPath, speed)
+	err = p.processAudioWithFFmpeg(context.Background(), inputPath, outputPath, speed, offset)
 	if err != nil {
 		os.Remove(outputPath) // Clean up on error
 		return "", err

@@ -40,6 +40,7 @@ type ffmpegReq struct {
 	UUID     string
 	TempPath string
 	Speed    float64
+	Offset   int64
 }
 
 // ffmpegResult represents the result of FFmpeg processing
@@ -87,7 +88,7 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 		}
 
 		log.Printf("Processing audio for %s (%.1fx speed)", job.Title, job.Speed)
-		outputPath, err := processor.ProcessAudio(job.TempPath, job.Speed)
+		outputPath, err := processor.ProcessAudio(job.TempPath, job.Speed, job.Offset)
 		if err != nil {
 			log.Printf("Error processing audio for %s: %v", job.Title, err)
 			results <- ffmpegResult{Err: err}
@@ -238,7 +239,7 @@ func processRun(ctx context.Context) error {
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
-			if oldEp.OriginalDuration == duration && oldEp.Length == expectedNewDuration {
+			if podcastProcessor.CanReuseEpisode(oldEp, duration, expectedNewDuration) {
 				log.Printf("Reusing existing processed file: %s", title)
 				result := podcast.ProcessedEpisode{
 					Title:            title,
@@ -289,21 +290,24 @@ func processRun(ctx context.Context) error {
 		}
 
 		i := res.Idx
-		title := entries[i].Title
-		duration := entries[i].Duration
-		url := entries[i].URL
-		id := entries[i].UUID
-
-		// Send to FFmpeg worker
-		ffmpegJobs <- ffmpegReq{
+		req := ffmpegReq{
 			Idx:      i,
-			Title:    title,
-			Duration: duration,
-			URL:      url,
-			UUID:     id,
+			Title:    entries[i].Title,
+			Duration: entries[i].Duration,
+			URL:      entries[i].URL,
+			UUID:     entries[i].UUID,
 			TempPath: res.TempPath,
 			Speed:    speed,
+			Offset:   0,
 		}
+
+		// update the offset if we have one
+		if ep, ok := episodeMapping[req.Title]; ok {
+			req.Offset = ep.Offset
+		}
+
+		// Send to FFmpeg worker
+		ffmpegJobs <- req
 	}
 	close(ffmpegJobs)
 	wg.Wait()
