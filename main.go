@@ -144,6 +144,62 @@ func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
 	}
 }
 
+// uploadResults handles uploading processed audio files to Google Drive
+func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results []podcast.ProcessedEpisode) error {
+	for i, result := range results {
+		// Check if context was cancelled
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled, stopping upload")
+			return ctx.Err()
+		default:
+		}
+
+		// Skip upload for reused files that already have download_url
+		if downloadURL := result.DownloadURL; downloadURL != "" {
+			log.Printf("Skipping upload for reused file: %s", result.Title)
+			// Extract drive_file_id from download_url for consistency
+			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL); driveFileID != "" {
+				results[i].DriveFileID = driveFileID
+			}
+			continue
+		}
+
+		log.Printf("Uploading %s to Google Drive", result.Title)
+		tempFile := result.TempFile
+		filename := fmt.Sprintf("%s.mp3", result.Title)
+
+		driveFileID, err := gdriveService.UploadFile(tempFile, filename, "audio/mpeg")
+		if err != nil {
+			return fmt.Errorf("failed to upload %s to Google Drive: %w", result.Title, err)
+		}
+
+		// Clean up temp file
+		if err := os.Remove(tempFile); err != nil {
+			log.Printf("Warning: failed to remove temp file %s: %v", tempFile, err)
+		}
+
+		results[i].DriveFileID = driveFileID
+	}
+
+	return nil
+}
+
+// updateFeed creates and uploads the RSS XML feed and saves the application state
+func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService *gdrive.Service, results []podcast.ProcessedEpisode) error {
+	// Create and upload RSS XML
+	xmlFeed := podcastProcessor.CreateRSSXML(results)
+	rssFileID, err := gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
+	if err != nil {
+		return fmt.Errorf("failed to upload RSS feed: %w", err)
+	}
+
+	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
+	log.Printf("RSS Feed Download URL: %s", rssDownloadURL)
+
+	return nil
+}
+
 func processRun(ctx context.Context) error {
 	// Initialize Google Drive service
 	gdriveService, err := gdrive.NewService(ctx)
@@ -187,6 +243,11 @@ func processRun(ctx context.Context) error {
 	}
 
 	startTime := time.Now()
+	defer func() {
+		if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+			log.Printf("Failed to save state: %v", err)
+		}
+	}()
 
 	podcastAddictBackup.AddListeningProgress(ctx, episodeMapping)
 
@@ -314,73 +375,31 @@ func processRun(ctx context.Context) error {
 	close(ffmpegResults)
 
 	// Collect FFmpeg results
+	var newResults []podcast.ProcessedEpisode
 	for ffmpegRes := range ffmpegResults {
 		if ffmpegRes.Err != nil {
 			log.Printf("FFmpeg processing failed: %v", ffmpegRes.Err)
 			continue
 		}
-		results = append(results, ffmpegRes.Result)
+		newResults = append(newResults, ffmpegRes.Result)
 	}
 
-	if len(results) == 0 {
-		log.Println("No audio entries processed successfully")
-		// Still update state to avoid reprocessing the same empty result
-		if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
-			log.Printf("Failed to save state: %v", err)
-		}
+	if len(newResults) == 0 {
+		log.Println("Skipping uploads since no audio entries successfully processed")
 		return nil
 	}
+	results = append(results, newResults...)
 	log.Printf("Processed %d audio files", len(results))
 
 	// Upload processed files to Google Drive
-	for i, result := range results {
-		// Check if context was cancelled
-		select {
-		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping upload")
-			return ctx.Err()
-		default:
-		}
+	if err := uploadResults(ctx, gdriveService, results); err != nil {
 
-		// Skip upload for reused files that already have download_url
-		if downloadURL := result.DownloadURL; downloadURL != "" {
-			log.Printf("Skipping upload for reused file: %s", result.Title)
-			// Extract drive_file_id from download_url for consistency
-			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL); driveFileID != "" {
-				result.DriveFileID = driveFileID
-			}
-			continue
-		}
-
-		log.Printf("Uploading %s to Google Drive", result.Title)
-		tempFile := result.TempFile
-		filename := fmt.Sprintf("%s.mp3", result.Title)
-
-		driveFileID, err := gdriveService.UploadFile(tempFile, filename, "audio/mpeg")
-		if err != nil {
-			return fmt.Errorf("failed to upload %s to Google Drive: %w", result.Title, err)
-		}
-
-		// Clean up temp file
-		if err := os.Remove(tempFile); err != nil {
-			log.Printf("Warning: failed to remove temp file %s: %v", tempFile, err)
-		}
-
-		results[i].DriveFileID = driveFileID
+		return err
 	}
 
-	// Create and upload RSS XML
-	xmlFeed := podcastProcessor.CreateRSSXML(results)
-	rssFileID, err = gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", rssFileID)
-	if err != nil {
-		return fmt.Errorf("failed to upload RSS feed: %w", err)
-	}
-
-	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
-	log.Printf("RSS Feed Download URL: %s", rssDownloadURL)
-
-	if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
-		log.Printf("Failed to save state: %v", err)
+	// Create and upload RSS XML feed and save state
+	if err := updateFeed(podcastProcessor, gdriveService, results); err != nil {
+		log.Printf("Failed to update feed: %v", err)
 	}
 
 	return nil
