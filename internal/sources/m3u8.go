@@ -10,26 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/api/drive/v3"
 )
-
-// M3U8FileInfo contains metadata about an M3U8 file
-type M3U8FileInfo struct {
-	File         *drive.File
-	FileName     string
-	ModifiedTime time.Time
-}
-
-// AudioEntry represents an entry in an M3U8 playlist
-type AudioEntry struct {
-	Title    string `json:"title"`
-	Duration int64  `json:"duration"`
-	URL      string `json:"url"`
-	UUID     string `json:"uuid"`
-}
 
 type M3U8Source struct {
 	drive          *gdrive.Service
@@ -45,38 +28,13 @@ func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
 	}
 }
 
-// GetLatestM3U8File checks for the most recent M3U8 file and returns metadata
-func (m *M3U8Source) GetLatestM3U8File(ctx context.Context) (*M3U8FileInfo, error) {
-	files, err := m.drive.GetFiles(config.M3UQuery, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get M3U8 files: %w", err)
-	}
-
-	if len(files) == 0 {
-		return nil, nil // No files found
-	}
-
-	mostRecentFile := m.drive.GetMostRecentFile(files)
-	if mostRecentFile == nil {
-		return nil, nil
-	}
-
-	// Parse the modified time
-	modifiedTime, err := time.Parse(time.RFC3339, mostRecentFile.ModifiedTime)
-	if err != nil {
-		log.Printf("Warning: couldn't parse modified time for %s: %v", mostRecentFile.Name, err)
-		modifiedTime = time.Time{} // Zero time as fallback
-	}
-
-	return &M3U8FileInfo{
-		File:         mostRecentFile,
-		ModifiedTime: modifiedTime,
-		FileName:     mostRecentFile.Name,
-	}, nil
+// GetLatest checks for the most recent M3U8 file and returns metadata
+func (m *M3U8Source) GetLatest(ctx context.Context) (*FileInfo, error) {
+	return GetLatestFile(ctx, m.drive, config.M3UQuery, "M3U8")
 }
 
-// ProcessM3U8File downloads and parses the M3U8 file
-func (m *M3U8Source) ProcessM3U8File(ctx context.Context, fileInfo *M3U8FileInfo) ([]AudioEntry, error) {
+// Process downloads and parses the M3U8 file
+func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]AudioEntry, error) {
 	fileID := fileInfo.File.Id
 
 	// Mark as processed

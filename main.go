@@ -249,46 +249,68 @@ func processRun(ctx context.Context) error {
 		}
 	}()
 
-	podcastAddictBackup.AddListeningProgress(ctx, episodeMapping)
-
-	// Discover new M3U8 (parse only)
-	m3u8File, err := m3u8src.GetLatestM3U8File(ctx)
+	// Check for new M3U8 file
+	m3u8File, err := m3u8src.GetLatest(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting latest M3U8 file: %w", err)
 	}
-	if m3u8File == nil {
-		log.Println("No M3U8 files found")
-		return nil
+
+	newM3U8 := false
+	if m3u8File != nil && (appState.LastRun.IsZero() || m3u8File.ModifiedTime.After(appState.LastRun)) {
+		newM3U8 = true
 	}
 
-	if !appState.LastRun.IsZero() && m3u8File.ModifiedTime.Before(appState.LastRun) {
-		log.Printf("M3U8 file '%s' is older than last run (file: %s, last run: %s)",
-			m3u8File.File.Name,
-			m3u8File.ModifiedTime.Format(time.RFC3339),
-			appState.LastRun.Format(time.RFC3339))
-		return nil
-	}
-
-	log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
-
-	entries, err := m3u8src.ProcessM3U8File(ctx, m3u8File)
+	// Check for new backup file
+	backupFile, err := podcastAddictBackup.GetLatest(ctx)
 	if err != nil {
-		return fmt.Errorf("error processing M3U8 file: %w", err)
+		log.Printf("Error getting latest backup file: %v", err)
+	}
+
+	newBackup := false
+	if backupFile != nil && (appState.LastRun.IsZero() || backupFile.ModifiedTime.After(appState.LastRun)) {
+		newBackup = true
+	}
+
+	// Determine processing mode
+	var entries []sources.AudioEntry
+	if newM3U8 {
+		log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
+
+		entries, err = m3u8src.Process(ctx, m3u8File)
+		if err != nil {
+			return fmt.Errorf("error processing M3U8 file: %w", err)
+		}
+
+		// Process M3U8 as before, including backup for offsets
+		podcastAddictBackup.AddListeningProgress(ctx, entries)
+	} else if newBackup {
+		log.Printf("Processing backup independently: %s (modified: %s)", backupFile.FileName, backupFile.ModifiedTime.Format(time.RFC3339))
+
+		// Process backup independently
+		entries, err = podcastAddictBackup.Process(ctx, backupFile)
+		if err != nil {
+			return fmt.Errorf("error processing backup independently: %w", err)
+		}
+	} else {
+		log.Println("No new M3U8 or backup files found since last run")
+		return nil
 	}
 	if len(entries) == 0 {
 		log.Println("No entries found in M3U8 file")
 		return nil
 	}
 
-	log.Printf("Processing %d entries from %s", len(entries), m3u8File.File.Name)
+	return processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
+}
 
+func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *gdrive.Service, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) error {
 	// Process entries locally
 	var results []podcast.ProcessedEpisode
 
 	// Start a single downloader worker with separate job and result channels
 	dlRequests := make(chan downloadReq, len(entries))
 	dlResults := make(chan downloadResult, len(entries))
-	go downloadWorker(ctx, processor, dlRequests, dlResults)
+	go downloadWorker(ctx, audioProcessor, dlRequests, dlResults)
 
 	speed := config.DefaultSpeed
 
@@ -331,7 +353,7 @@ func processRun(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ffmpegWorker(ctx, processor, ffmpegJobs, ffmpegResults)
+			ffmpegWorker(ctx, audioProcessor, ffmpegJobs, ffmpegResults)
 		}()
 	}
 
@@ -351,7 +373,7 @@ func processRun(ctx context.Context) error {
 		}
 
 		i := res.Idx
-		req := ffmpegReq{
+		ffmpegJobs <- ffmpegReq{
 			Idx:      i,
 			Title:    entries[i].Title,
 			Duration: entries[i].Duration,
@@ -359,16 +381,8 @@ func processRun(ctx context.Context) error {
 			UUID:     entries[i].UUID,
 			TempPath: res.TempPath,
 			Speed:    speed,
-			Offset:   0,
+			Offset:   entries[i].Offset,
 		}
-
-		// update the offset if we have one
-		if ep, ok := episodeMapping[req.Title]; ok {
-			req.Offset = ep.Offset
-		}
-
-		// Send to FFmpeg worker
-		ffmpegJobs <- req
 	}
 	close(ffmpegJobs)
 	wg.Wait()
@@ -393,7 +407,6 @@ func processRun(ctx context.Context) error {
 
 	// Upload processed files to Google Drive
 	if err := uploadResults(ctx, gdriveService, results); err != nil {
-
 		return err
 	}
 

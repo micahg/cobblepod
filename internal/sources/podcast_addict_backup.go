@@ -13,12 +13,11 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"cobblepod/internal/gdrive"
-	"cobblepod/internal/podcast"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -39,9 +38,15 @@ func NewPodcastAddictBackup(drive *gdrive.Service) *PodcastAddictBackup {
 	return &PodcastAddictBackup{drive: drive}
 }
 
-// AddListeningProgress locates the most recent backup and will (later) augment epMap with offsets.
+// GetLatest checks for the most recent backup file and returns metadata
+func (p *PodcastAddictBackup) GetLatest(ctx context.Context) (*FileInfo, error) {
+	query := "name contains 'PodcastAddict' and name contains '.backup' and trashed = false"
+	return GetLatestFile(ctx, p.drive, query, "backup")
+}
+
+// AddListeningProgress locates the most recent backup and will (later) augment entries with offsets.
 // Currently returns an empty slice as a placeholder.
-func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap map[string]podcast.ExistingEpisode) ([]ListeningProgress, error) {
+func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries []AudioEntry) ([]ListeningProgress, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -75,10 +80,91 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 		return nil, fmt.Errorf("querying listening progress: %w", err)
 	}
 
-	// Update the provided episode map with the offsets from progress
-	p.updateEpisodeMap(progress, epMap)
+	// Update the provided entries with the offsets from progress
+	p.updateEntries(progress, entries)
 
 	return progress, nil
+}
+
+// Process locates the most recent backup and processes all episodes for independent processing.
+// This is used when processing backup without M3U8 file.
+func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]AudioEntry, error) {
+	if p.drive == nil {
+		return nil, errors.New("drive service is nil")
+	}
+
+	if backupFile == nil {
+		return nil, errors.New("no backup file provided")
+	}
+
+	log.Printf("Processing PodcastAddict backup: %s (modified %s)", backupFile.FileName, backupFile.ModifiedTime)
+
+	backup, err := p.drive.DownloadFileToTemp(backupFile.File.Id)
+	if err != nil {
+		return nil, fmt.Errorf("downloading backup file: %w", err)
+	}
+	defer os.Remove(backup)
+
+	db, err := p.extractBackupDB(backup)
+	if err != nil {
+		return nil, fmt.Errorf("extracting backup archive: %w", err)
+	}
+	defer os.Remove(db)
+
+	results, err := p.queryAllEpisodes(db)
+	if err != nil {
+		return nil, fmt.Errorf("querying all episodes: %w", err)
+	}
+
+	return results, nil
+}
+
+// queryAllEpisodes opens the SQLite database at dbPath and returns all episodes
+// without the position_to_resume > 0 filter for independent backup processing.
+func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, error) {
+	// Open read-only using a proper file URI to avoid accidental writes.
+	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
+	dsn := u.String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	defer db.Close()
+
+	// Removed e.position_to_resume > 0 to get all episodes in the playlist
+	const q = `
+			SELECT 
+				p.name as podcast,
+				e.download_url as url,
+				e.position_to_resume as offset,
+				e.name as episode
+			FROM episodes e
+			JOIN podcasts p ON p._id = e.podcast_id
+			JOIN ordered_list  ON o.id = e._id
+			WHERE o.type = 1`
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]AudioEntry, 0, 64)
+	for rows.Next() {
+		var ae AudioEntry
+		var podcast string
+		var episode string
+		if err := rows.Scan(&podcast, &ae.URL, &ae.Offset, &episode); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		ae.Title = fmt.Sprintf("%s - %s", podcast, episode)
+		ae.UUID = uuid.New().String()
+		results = append(results, ae)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return results, nil
 }
 
 // extractBackupDB creates extracts the ZIP-formatted
@@ -171,19 +257,17 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 	return results, nil
 }
 
-// updateEpisodeMap applies listening progress offsets into the provided episode map.
+// updateEntries applies listening progress offsets into the provided entries slice.
 // Key format mirrors Python: "<podcast> - <episode>".
-func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epMap map[string]podcast.ExistingEpisode) {
+func (p *PodcastAddictBackup) updateEntries(progress []ListeningProgress, entries []AudioEntry) {
 	for _, pr := range progress {
 		key := fmt.Sprintf("%s - %s", pr.Podcast, pr.Episode)
-		episode := epMap[key]
-		episode.Offset = pr.Offset
-		epMap[key] = episode
+		// Find matching entry by title and update its offset
+		for i := range entries {
+			if entries[i].Title == key {
+				entries[i].Offset = pr.Offset
+				break
+			}
+		}
 	}
-}
-
-// isPodcastAddictBackupName returns true if filename looks like a PodcastAddict backup.
-func isPodcastAddictBackupName(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.Contains(lower, "podcastaddict") && filepath.Ext(lower) == ".backup"
 }

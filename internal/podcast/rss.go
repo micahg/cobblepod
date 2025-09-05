@@ -86,7 +86,6 @@ type ExistingEpisode struct {
 	Length           int64  `json:"length"`
 	OriginalDuration int64  `json:"original_duration"`
 	OriginalGUID     string `json:"original_guid,omitempty"`
-	Offset           int64  `json:"offset,omitempty"` // From PodcastAddict backup
 }
 
 // NewRSSProcessor creates a new RSS processor
