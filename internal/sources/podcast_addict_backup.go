@@ -18,6 +18,7 @@ import (
 	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -88,7 +89,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 
 // Process locates the most recent backup and processes all episodes for independent processing.
 // This is used when processing backup without M3U8 file.
-func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]podcast.ProcessedEpisode, error) {
+func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]AudioEntry, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -111,23 +112,9 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 	}
 	defer os.Remove(db)
 
-	progress, err := p.queryAllEpisodes(db)
+	results, err := p.queryAllEpisodes(db)
 	if err != nil {
 		return nil, fmt.Errorf("querying all episodes: %w", err)
-	}
-
-	// Convert listening progress to processed episodes
-	var results []podcast.ProcessedEpisode
-	for _, pr := range progress {
-		result := podcast.ProcessedEpisode{
-			Title:            pr.Episode,
-			OriginalDuration: 0,   // Will be set during processing
-			NewDuration:      0,   // Will be calculated
-			UUID:             "",  // Will be generated
-			Speed:            1.5, // Default speed from config
-			// Note: TempFile and other fields will be set during actual processing
-		}
-		results = append(results, result)
 	}
 
 	return results, nil
@@ -135,7 +122,7 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 
 // queryAllEpisodes opens the SQLite database at dbPath and returns all episodes
 // without the position_to_resume > 0 filter for independent backup processing.
-func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]ListeningProgress, error) {
+func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, error) {
 	// Open read-only using a proper file URI to avoid accidental writes.
 	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
 	dsn := u.String()
@@ -149,6 +136,7 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]ListeningProgre
 	const q = `
 			SELECT 
 				p.name as podcast,
+				e.download_url as url,
 				e.position_to_resume as offset,
 				e.name as episode
 			FROM episodes e
@@ -162,13 +150,17 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]ListeningProgre
 	}
 	defer rows.Close()
 
-	results := make([]ListeningProgress, 0, 64)
+	results := make([]AudioEntry, 0, 64)
 	for rows.Next() {
-		var lp ListeningProgress
-		if err := rows.Scan(&lp.Podcast, &lp.Offset, &lp.Episode); err != nil {
+		var ae AudioEntry
+		var podcast string
+		var episode string
+		if err := rows.Scan(&podcast, &ae.URL, &ae.Offset, &episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-		results = append(results, lp)
+		ae.Title = fmt.Sprintf("%s - %s", podcast, episode)
+		ae.UUID = uuid.New().String()
+		results = append(results, ae)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows: %w", err)

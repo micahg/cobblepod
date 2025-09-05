@@ -272,54 +272,35 @@ func processRun(ctx context.Context) error {
 	}
 
 	// Determine processing mode
+	var entries []sources.AudioEntry
 	if newM3U8 {
 		log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
 
 		// Process M3U8 as before, including backup for offsets
 		podcastAddictBackup.AddListeningProgress(ctx, episodeMapping)
 
-		entries, err := m3u8src.Process(ctx, m3u8File)
+		entries, err = m3u8src.Process(ctx, m3u8File)
 		if err != nil {
 			return fmt.Errorf("error processing M3U8 file: %w", err)
 		}
-		if len(entries) == 0 {
-			log.Println("No entries found in M3U8 file")
-			return nil
-		}
-
-		return processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
-
 	} else if newBackup {
 		log.Printf("Processing backup independently: %s (modified: %s)", backupFile.FileName, backupFile.ModifiedTime.Format(time.RFC3339))
 
 		// Process backup independently
-		newResults, err := podcastAddictBackup.Process(ctx, backupFile)
+		entries, err = podcastAddictBackup.Process(ctx, backupFile)
 		if err != nil {
 			return fmt.Errorf("error processing backup independently: %w", err)
 		}
-		if len(newResults) == 0 {
-			log.Println("No episodes found in backup")
-			return nil
-		}
-
-		// Convert to AudioEntry format for processing
-		var entries []sources.AudioEntry
-		for _, result := range newResults {
-			entry := sources.AudioEntry{
-				Title:    result.Title,
-				Duration: result.OriginalDuration,
-				URL:      "", // Will need to be filled from backup data
-				UUID:     result.UUID,
-			}
-			entries = append(entries, entry)
-		}
-
-		return processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
-
 	} else {
 		log.Println("No new M3U8 or backup files found since last run")
 		return nil
 	}
+	if len(entries) == 0 {
+		log.Println("No entries found in M3U8 file")
+		return nil
+	}
+
+	return processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
 }
 
 func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *gdrive.Service, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) error {
@@ -400,11 +381,11 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 			UUID:     entries[i].UUID,
 			TempPath: res.TempPath,
 			Speed:    speed,
-			Offset:   0,
+			Offset:   entries[i].Offset,
 		}
 
 		// update the offset if we have one
-		if ep, ok := episodeMapping[req.Title]; ok {
+		if ep, ok := episodeMapping[req.Title]; ok && ep.Offset > 0 {
 			req.Offset = ep.Offset
 		}
 

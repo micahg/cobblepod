@@ -20,6 +20,7 @@ type AudioEntry struct {
 	Duration int64  `json:"duration"`
 	URL      string `json:"url"`
 	UUID     string `json:"uuid"`
+	Offset   int64  `json:"offset,omitempty"` // Listening offset in seconds
 }
 
 type M3U8Source struct {
