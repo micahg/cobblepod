@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
@@ -39,37 +38,10 @@ func NewPodcastAddictBackup(drive *gdrive.Service) *PodcastAddictBackup {
 	return &PodcastAddictBackup{drive: drive}
 }
 
-// TODO GetLatestBackupFile abd GetLatestM3U8File share a lot of code - normalize them.
-
-// GetLatestBackupFile checks for the most recent backup file and returns metadata
-func (p *PodcastAddictBackup) GetLatestBackupFile(ctx context.Context) (*FileInfo, error) {
+// GetLatest checks for the most recent backup file and returns metadata
+func (p *PodcastAddictBackup) GetLatest(ctx context.Context) (*FileInfo, error) {
 	query := "name contains 'PodcastAddict' and name contains '.backup' and trashed = false"
-	files, err := p.drive.GetFiles(query, true)
-	if err != nil {
-		return nil, fmt.Errorf("querying backup files: %w", err)
-	}
-	if len(files) == 0 {
-		return nil, nil // No backup files found
-	}
-
-	mostRecentFile := p.drive.GetMostRecentFile(files)
-	if mostRecentFile == nil {
-		return nil, nil
-	}
-
-	modifiedTime, err := time.Parse(time.RFC3339, mostRecentFile.ModifiedTime)
-	if err != nil {
-		log.Printf("Error parsing backup modified time: %v", err)
-		modifiedTime = time.Time{} // Zero time as fallback
-	}
-
-	backupInfo := &FileInfo{
-		File:         mostRecentFile,
-		FileName:     mostRecentFile.Name,
-		ModifiedTime: modifiedTime,
-	}
-
-	return backupInfo, nil
+	return GetLatestFile(ctx, p.drive, query, "backup")
 }
 
 // AddListeningProgress locates the most recent backup and will (later) augment epMap with offsets.

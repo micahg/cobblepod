@@ -250,7 +250,7 @@ func processRun(ctx context.Context) error {
 	}()
 
 	// Check for new M3U8 file
-	m3u8File, err := m3u8src.GetLatestM3U8File(ctx)
+	m3u8File, err := m3u8src.GetLatest(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting latest M3U8 file: %w", err)
 	}
@@ -261,7 +261,7 @@ func processRun(ctx context.Context) error {
 	}
 
 	// Check for new backup file
-	backupFile, err := podcastAddictBackup.GetLatestBackupFile(ctx)
+	backupFile, err := podcastAddictBackup.GetLatest(ctx)
 	if err != nil {
 		log.Printf("Error getting latest backup file: %v", err)
 	}
