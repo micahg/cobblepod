@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"cobblepod/internal/gdrive"
-	"cobblepod/internal/podcast"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -45,9 +44,9 @@ func (p *PodcastAddictBackup) GetLatest(ctx context.Context) (*FileInfo, error) 
 	return GetLatestFile(ctx, p.drive, query, "backup")
 }
 
-// AddListeningProgress locates the most recent backup and will (later) augment epMap with offsets.
+// AddListeningProgress locates the most recent backup and will (later) augment entries with offsets.
 // Currently returns an empty slice as a placeholder.
-func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap map[string]podcast.ExistingEpisode) ([]ListeningProgress, error) {
+func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries []AudioEntry) ([]ListeningProgress, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -81,8 +80,8 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, epMap ma
 		return nil, fmt.Errorf("querying listening progress: %w", err)
 	}
 
-	// Update the provided episode map with the offsets from progress
-	p.updateEpisodeMap(progress, epMap)
+	// Update the provided entries with the offsets from progress
+	p.updateEntries(progress, entries)
 
 	return progress, nil
 }
@@ -141,8 +140,8 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 				e.name as episode
 			FROM episodes e
 			JOIN podcasts p ON p._id = e.podcast_id
-			JOIN ordered_list ol ON ol.id = e._id
-			WHERE ol.type = 1`
+			JOIN ordered_list  ON o.id = e._id
+			WHERE o.type = 1`
 
 	rows, err := db.Query(q)
 	if err != nil {
@@ -258,13 +257,17 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 	return results, nil
 }
 
-// updateEpisodeMap applies listening progress offsets into the provided episode map.
+// updateEntries applies listening progress offsets into the provided entries slice.
 // Key format mirrors Python: "<podcast> - <episode>".
-func (p *PodcastAddictBackup) updateEpisodeMap(progress []ListeningProgress, epMap map[string]podcast.ExistingEpisode) {
+func (p *PodcastAddictBackup) updateEntries(progress []ListeningProgress, entries []AudioEntry) {
 	for _, pr := range progress {
 		key := fmt.Sprintf("%s - %s", pr.Podcast, pr.Episode)
-		episode := epMap[key]
-		episode.Offset = pr.Offset
-		epMap[key] = episode
+		// Find matching entry by title and update its offset
+		for i := range entries {
+			if entries[i].Title == key {
+				entries[i].Offset = pr.Offset
+				break
+			}
+		}
 	}
 }

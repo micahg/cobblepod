@@ -276,13 +276,13 @@ func processRun(ctx context.Context) error {
 	if newM3U8 {
 		log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
 
-		// Process M3U8 as before, including backup for offsets
-		podcastAddictBackup.AddListeningProgress(ctx, episodeMapping)
-
 		entries, err = m3u8src.Process(ctx, m3u8File)
 		if err != nil {
 			return fmt.Errorf("error processing M3U8 file: %w", err)
 		}
+
+		// Process M3U8 as before, including backup for offsets
+		podcastAddictBackup.AddListeningProgress(ctx, entries)
 	} else if newBackup {
 		log.Printf("Processing backup independently: %s (modified: %s)", backupFile.FileName, backupFile.ModifiedTime.Format(time.RFC3339))
 
@@ -373,7 +373,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		}
 
 		i := res.Idx
-		req := ffmpegReq{
+		ffmpegJobs <- ffmpegReq{
 			Idx:      i,
 			Title:    entries[i].Title,
 			Duration: entries[i].Duration,
@@ -383,14 +383,6 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 			Speed:    speed,
 			Offset:   entries[i].Offset,
 		}
-
-		// update the offset if we have one
-		if ep, ok := episodeMapping[req.Title]; ok && ep.Offset > 0 {
-			req.Offset = ep.Offset
-		}
-
-		// Send to FFmpeg worker
-		ffmpegJobs <- req
 	}
 	close(ffmpegJobs)
 	wg.Wait()
