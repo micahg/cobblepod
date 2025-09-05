@@ -18,6 +18,15 @@ type FileInfo struct {
 	ModifiedTime time.Time
 }
 
+// AudioEntry represents an audio entry from various sources (M3U8 playlist, backup, etc.)
+type AudioEntry struct {
+	Title    string `json:"title"`
+	Duration int64  `json:"duration"`
+	URL      string `json:"url"`
+	UUID     string `json:"uuid"`
+	Offset   int64  `json:"offset,omitempty"` // Listening offset in seconds
+}
+
 // GetLatestFile is a common function to get the most recent file matching a query
 func GetLatestFile(ctx context.Context, drive *gdrive.Service, query string, fileTypeName string) (*FileInfo, error) {
 	files, err := drive.GetFiles(query, true)

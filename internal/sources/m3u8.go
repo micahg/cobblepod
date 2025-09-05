@@ -14,15 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// AudioEntry represents an entry in an M3U8 playlist
-type AudioEntry struct {
-	Title    string `json:"title"`
-	Duration int64  `json:"duration"`
-	URL      string `json:"url"`
-	UUID     string `json:"uuid"`
-	Offset   int64  `json:"offset,omitempty"` // Listening offset in seconds
-}
-
 type M3U8Source struct {
 	drive          *gdrive.Service
 	mutex          sync.RWMutex
