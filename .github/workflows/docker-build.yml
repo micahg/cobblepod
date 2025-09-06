@@ -2,19 +2,9 @@ name: Test Docker Build
 
 on:
   push:
-    branches:
-      - '**'
-      - '!main'
-      - '!master'
-    paths:
-      - 'server/**'
-      - '.github/workflows/docker-build.yml'
-      - '.github/workflows/go-test-reusable.yml'
-      - '.github/workflows/docker-build-reusable.yml'
   pull_request:
     branches:
       - main
-      - master
     paths:
       - 'server/**'
       - '.github/workflows/docker-build.yml'

@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: ${{ inputs.push && 'write' || 'read' }}
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       tags: ${{ steps.meta.outputs.tags || inputs.tags-input }}
