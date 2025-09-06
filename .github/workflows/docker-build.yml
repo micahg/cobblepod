@@ -12,7 +12,6 @@ on:
 jobs:
 
   test-build:
-    needs: test
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
       context: './server'
