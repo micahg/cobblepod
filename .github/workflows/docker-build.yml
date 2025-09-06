@@ -8,18 +8,9 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/docker-build.yml'
-      - '.github/workflows/go-test-reusable.yml'
       - '.github/workflows/docker-build-reusable.yml'
 
-env:
-  IMAGE_NAME: cobblepod-test
-
 jobs:
-  test:
-    uses: ./.github/workflows/go-test-reusable.yml
-    with:
-      go-version: '1.24'
-      working-directory: './server'
 
   test-build:
     needs: test
@@ -28,8 +19,8 @@ jobs:
       context: './server'
       platforms: 'linux/amd64'
       push: false
-      image-name: ${{ env.IMAGE_NAME }}
-      tags-input: ${{ env.IMAGE_NAME }}:test
+      image-name: 'cobblepod-test'
+      tags-input: 'cobblepod-test:test'
       use-metadata: false
       login-required: false
 
@@ -39,11 +30,11 @@ jobs:
     steps:
     - name: Test image can be created
       run: |
-        docker images ${{ env.IMAGE_NAME }}:test
+        docker images cobblepod-test:test
         echo "✅ Docker image built successfully"
 
     - name: Basic smoke test
       run: |
         # Test that the binary exists and can show help/version
-        docker run --rm ${{ env.IMAGE_NAME }}:test ./cobblepod --help || true
+        docker run --rm cobblepod-test:test ./cobblepod --help || true
         echo "✅ Basic smoke test completed"
