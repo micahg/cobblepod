@@ -9,6 +9,7 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/go-test.yml'
+      - '.github/workflows/go-test-reusable.yml'
   pull_request:
     branches:
       - main
@@ -16,65 +17,11 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/go-test.yml'
+      - '.github/workflows/go-test-reusable.yml'
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.24'
-        cache-dependency-path: server/go.sum
-
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('server/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      working-directory: ./server
-      run: |
-        go mod download
-        go mod verify
-
-    - name: Run go vet
-      working-directory: ./server
-      run: go vet ./...
-
-    - name: Run go fmt check
-      working-directory: ./server
-      run: |
-        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-          echo "The following files are not formatted:"
-          gofmt -s -l .
-          echo "Please run 'go fmt ./...' to format your code"
-          exit 1
-        fi
-
-    - name: Run tests
-      working-directory: ./server
-      run: go test -v -race -coverprofile=coverage.out ./...
-
-    - name: Upload coverage to Codecov
-      if: success()
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./server/coverage.out
-        directory: ./server
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-
-    - name: Build application
-      working-directory: ./server
-      run: go build -v ./...
+    uses: ./.github/workflows/go-test-reusable.yml
+    with:
+      go-version: '1.24'
+      working-directory: './server'
