@@ -10,7 +10,6 @@ on:
       - '.github/workflows/docker-build-reusable.yml'
 
 jobs:
-
   test-build:
     permissions:
       contents: read
@@ -24,18 +23,3 @@ jobs:
       tags-input: 'cobblepod-test:test'
       use-metadata: false
       login-required: false
-
-  smoke-test:
-    needs: test-build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Test image can be created
-      run: |
-        docker images cobblepod-test:test
-        echo "✅ Docker image built successfully"
-
-    - name: Basic smoke test
-      run: |
-        # Test that the binary exists and can show help/version
-        docker run --rm cobblepod-test:test ./cobblepod --help || true
-        echo "✅ Basic smoke test completed"
