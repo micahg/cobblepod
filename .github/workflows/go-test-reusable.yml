@@ -1,0 +1,76 @@
+name: Go Test (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version to use'
+        required: false
+        type: string
+        default: '1.24'
+      working-directory:
+        description: 'Working directory for Go commands'
+        required: false
+        type: string
+        default: './server'
+    outputs:
+      test-result:
+        description: 'Result of tests'
+        value: ${{ jobs.test.outputs.result }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.test-step.outputs.result }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+
+    - name: Download dependencies
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        go mod download
+        go mod verify
+
+    - name: Run go vet
+      working-directory: ${{ inputs.working-directory }}
+      run: go vet ./...
+
+    - name: Run go fmt check
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "The following files are not formatted:"
+          gofmt -s -l .
+          echo "Please run 'go fmt ./...' to format your code"
+          exit 1
+        fi
+
+    - name: Run tests
+      id: test-step
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        go test -v -race -coverprofile=coverage.out ./...
+        echo "result=success" >> $GITHUB_OUTPUT
+
+    - name: Upload coverage to Codecov
+      if: success()
+      uses: codecov/codecov-action@v3
+      with:
+        file: ${{ inputs.working-directory }}/coverage.out
+        directory: ${{ inputs.working-directory }}
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Build application
+      working-directory: ${{ inputs.working-directory }}
+      run: go build -v ./...
