@@ -52,17 +52,71 @@ on:
     outputs:
       image-digest:
         description: 'Built image digest'
-        value: ${{ jobs.build.outputs.digest }}
+        value: ${{ jobs.build-no-push.outputs.digest || jobs.build-and-push.outputs.digest }}
       image-tags:
         description: 'Built image tags'
-        value: ${{ jobs.build.outputs.tags }}
+        value: ${{ jobs.build-no-push.outputs.tags || jobs.build-and-push.outputs.tags }}
 
 jobs:
-  build:
+  build-no-push:
+    if: ${{ !inputs.push }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: ${{ inputs.push && 'write' || 'read' }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags || inputs.tags-input }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Registry
+      if: ${{ inputs.login-required }}
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ inputs.registry }}
+        username: ${{ secrets.registry-username }}
+        password: ${{ secrets.registry-password }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      if: ${{ inputs.use-metadata }}
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.registry }}/${{ inputs.image-name }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest
+
+    - name: Build Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ inputs.context }}
+        platforms: ${{ inputs.platforms }}
+        push: false
+        tags: ${{ inputs.use-metadata && steps.meta.outputs.tags || inputs.tags-input }}
+        labels: ${{ inputs.use-metadata && steps.meta.outputs.labels || '' }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Output image information
+      run: |
+        echo "Image digest: ${{ steps.build.outputs.digest }}"
+        echo "Image tags: ${{ inputs.use-metadata && steps.meta.outputs.tags || inputs.tags-input }}"
+
+  build-and-push:
+    if: ${{ inputs.push }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       tags: ${{ steps.meta.outputs.tags || inputs.tags-input }}
@@ -100,7 +154,7 @@ jobs:
       with:
         context: ${{ inputs.context }}
         platforms: ${{ inputs.platforms }}
-        push: ${{ inputs.push }}
+        push: true
         tags: ${{ inputs.use-metadata && steps.meta.outputs.tags || inputs.tags-input }}
         labels: ${{ inputs.use-metadata && steps.meta.outputs.labels || '' }}
         cache-from: type=gha
