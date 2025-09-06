@@ -34,16 +34,6 @@ jobs:
         go-version: ${{ inputs.go-version }}
         cache-dependency-path: ${{ inputs.working-directory }}/go.sum
 
-    - name: Cache Go modules
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles(format('{0}/go.sum', inputs.working-directory)) }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
     - name: Download dependencies
       working-directory: ${{ inputs.working-directory }}
       run: |
