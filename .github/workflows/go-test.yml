@@ -10,9 +10,6 @@ on:
       - '.github/workflows/go-test-reusable.yml'
       - '.github/workflows/docker-build-reusable.yml'
 
-env:
-  IMAGE_NAME: cobblepod-test
-
 jobs:
   test:
     uses: ./.github/workflows/go-test-reusable.yml
@@ -27,7 +24,7 @@ jobs:
       context: './server'
       platforms: 'linux/amd64'
       push: false
-      image-name: ${{ env.IMAGE_NAME }}
-      tags-input: ${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+      image-name: 'cobblepod-test'
+      tags-input: 'cobblepod-test:pr-${{ github.event.number }}'
       use-metadata: false
       login-required: false
