@@ -8,6 +8,10 @@ on:
       - 'server/**'
       - '.github/workflows/go-test.yml'
       - '.github/workflows/go-test-reusable.yml'
+      - '.github/workflows/docker-build-reusable.yml'
+
+env:
+  IMAGE_NAME: cobblepod-test
 
 jobs:
   test:
@@ -15,3 +19,15 @@ jobs:
     with:
       go-version: '1.24'
       working-directory: './server'
+
+  docker-build:
+    needs: test
+    uses: ./.github/workflows/docker-build-reusable.yml
+    with:
+      context: './server'
+      platforms: 'linux/amd64'
+      push: false
+      image-name: ${{ env.IMAGE_NAME }}
+      tags-input: ${{ env.IMAGE_NAME }}:pr-${{ github.event.number }}
+      use-metadata: false
+      login-required: false
