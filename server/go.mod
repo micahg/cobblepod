@@ -6,7 +6,7 @@ toolchain go1.24.6
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/valkey-io/valkey-glide/go v1.3.4
+	github.com/redis/go-redis/v9 v9.12.1
 	golang.org/x/oauth2 v0.15.0
 	google.golang.org/api v0.153.0
 	modernc.org/sqlite v1.38.2
@@ -25,7 +25,6 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/redis/go-redis/v9 v9.12.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.16.0 // indirect

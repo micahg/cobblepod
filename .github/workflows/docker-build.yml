@@ -6,10 +6,16 @@ on:
       - '**'
       - '!main'
       - '!master'
+    paths:
+      - 'server/**'
+      - '.github/workflows/docker-build.yml'
   pull_request:
     branches:
       - main
       - master
+    paths:
+      - 'server/**'
+      - '.github/workflows/docker-build.yml'
 
 env:
   IMAGE_NAME: cobblepod-test
@@ -30,7 +36,7 @@ jobs:
     - name: Build Docker image for testing
       uses: docker/build-push-action@v5
       with:
-        context: .
+        context: ./server
         platforms: linux/amd64
         push: false
         tags: ${{ env.IMAGE_NAME }}:test
