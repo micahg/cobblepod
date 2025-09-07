@@ -64,7 +64,7 @@ docker compose -f cobblepod-compose.yml logs -f cobblepod
 
 ```
 docker compose -f cobblepod-compose.yml pull
-docker compose -f cobblepod-compose.yml up --force-recreate cobblepod
+docker compose -f cobblepod-compose.yml up --force-recreate cobblepod -d
 ```
 
 
