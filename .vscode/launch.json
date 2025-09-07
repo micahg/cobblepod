@@ -9,21 +9,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/main.go"
+            "program": "${workspaceFolder}/server/main.go"
         },
-        {
-            "name": "server",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/server.py",
-            "console": "integratedTerminal",
-        },
-        {
-            "name": "main",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal"
-        }
     ]
 }
