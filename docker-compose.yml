@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  cobblepod:
+    image: mfg81/cobblepod:latest
+    container_name: cobblepod
+    restart: unless-stopped
+    environment:
+      # Valkey connection (points to the valkey service)
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      # Polling settings
+      - POLL_INTERVAL=${POLL_INTERVAL:-300}
+    volumes:
+      # Mount gcloud config directory for Application Default Credentials
+      - ${HOME}/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Mount data directory for temporary files
+      - ./data:/app/data
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks:
+      - cobblepod-network
+
+  valkey:
+    image: valkey/valkey:latest
+    container_name: cobblepod-valkey
+    restart: unless-stopped
+    command: valkey-server --appendonly yes --appendfsync everysec
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - cobblepod-network
+
+volumes:
+  valkey-data:
+
+networks:
+  cobblepod-network:
+    driver: bridge

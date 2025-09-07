@@ -18,13 +18,65 @@ This is a Go rewrite of the original Python M3U8 audio processor. It processes M
 
 ## Running with Docker
 
+First, setup `gcloud` (I'll assume you can manage this package on your own):
+
+```bash
+# Auth
+gcloud auth login
+
+# Set up Application Default Credentials
+gcloud auth application-default login
+
+# Set your project ID
+gcloud config set project YOUR_PROJECT_ID
+
+# Enable required APIs
+gcloud services enable drive.googleapis.com
+
+# Enable scopes
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/cloud-platform
+
+# Ensure the container can read (I KNOW, first thing I'll fix a frontend)
+chmod +r .config/gcloud/application_default_credentials.json
+```
+
+Then, pull the compose file:
+
+```bash 
+curl "https://raw.githubusercontent.com/micahg/cobblepod/refs/heads/main/docker-compose.yml" -o cobblepod-compose.yml
+```
+
+Run `crontab -e` to edit your user's crontab, and add the following:
+
+```
+@reboot docker compose -f cobblepod-compose.yml up -d
+```
+
+or start manually by running the docker compose command above.
+
+To check your logs, you can run:
+
+```bash
+docker compose -f cobblepod-compose.yml logs -f cobblepod
+```
+
+### Updating
+
+```
+docker compose -f cobblepod-compose.yml pull
+docker compose -f cobblepod-compose.yml up --force-recreate cobblepod -d
+```
+
+
+### Without Compose
+
 ```
 docker run -v "$HOME/.config/gcloud:/home/appuser/.config/gcloud" cobblepod
 ```
 
 Note, you need to make `$HOME/.config/gcloud/application_default_credentials.json` readable inside the docker container. *THIS IS A SECURITY PROBLEM AND I KNOW IT*. I'm hoping to make a proper auth fix for this in the future (where you'd sign in as a client) -- might not work though because I think google wants a reachable URL. Sadly, device code doesn't work with the google cloud permissions we need 😭
 
-## Setup
+## Development
 
 1. Install dependencies:
    ```bash
