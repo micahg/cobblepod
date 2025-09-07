@@ -60,6 +60,14 @@ To check your logs, you can run:
 docker compose -f cobblepod-compose.yml logs -f cobblepod
 ```
 
+### Updating
+
+```
+docker compose -f cobblepod-compose.yml pull
+docker compose -f cobblepod-compose.yml restart cobblepod
+```
+
+
 ### Without Compose
 
 ```
