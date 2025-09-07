@@ -18,6 +18,18 @@ This is a Go rewrite of the original Python M3U8 audio processor. It processes M
 
 ## Running with Docker
 
+First, pull the compose file:
+
+```bash 
+curl "https://raw.githubusercontent.com/micahg/cobblepod/refs/heads/main/docker-compose.yml" -o cobblepod-compose.yml
+```
+
+Then, run `crontab -e` to edit your user's crontab, and add the following:
+
+```
+@reboot docker compose -f cobblepod-compose.yml up -d
+```
+
 ```
 docker run -v "$HOME/.config/gcloud:/home/appuser/.config/gcloud" cobblepod
 ```
