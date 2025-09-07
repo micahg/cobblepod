@@ -140,7 +140,7 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 				e.name as episode
 			FROM episodes e
 			JOIN podcasts p ON p._id = e.podcast_id
-			JOIN ordered_list  ON o.id = e._id
+			JOIN ordered_list o ON o.id = e._id
 			WHERE o.type = 1`
 
 	rows, err := db.Query(q)
