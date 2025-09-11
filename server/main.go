@@ -311,8 +311,14 @@ func processRun(ctx context.Context) error {
 	return nil
 }
 
+// GDriveDeleter interface for the subset of gdrive.Service methods used by deleteUnusedEpisodes
+type GDriveDeleter interface {
+	ExtractFileIDFromURL(url string) string
+	DeleteFile(fileID string) error
+}
+
 // deleteUnusedEpisodes removes episodes from Google Drive that are no longer in the current playlist
-func deleteUnusedEpisodes(gdriveService *gdrive.Service, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
+func deleteUnusedEpisodes(gdriveService GDriveDeleter, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
 	// Delete episodes that are not reused
 	for title, episode := range episodeMapping {
 		if _, ok := reused[title]; ok {
