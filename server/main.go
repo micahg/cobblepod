@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -74,7 +74,7 @@ func downloadWorker(ctx context.Context, processor *audio.Processor, requests <-
 func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan ffmpegReq, results chan<- ffmpegResult) {
 	fileCount := 0
 	defer func() {
-		log.Printf("FFmpeg worker completed processing %d jobs", fileCount)
+		slog.Info("FFmpeg worker completed", "processed_files", fileCount)
 	}()
 
 	for job := range jobs {
@@ -87,21 +87,21 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 		default:
 		}
 
-		log.Printf("Processing audio for %s (%.1fx speed)", job.Title, job.Speed)
+		slog.Info("Processing audio", "title", job.Title, "speed", job.Speed)
 		outputPath, err := processor.ProcessAudio(job.TempPath, job.Speed, job.Offset)
 		if err != nil {
-			log.Printf("Error processing audio for %s: %v", job.Title, err)
+			slog.Error("Error processing audio", "title", job.Title, "error", err)
 			results <- ffmpegResult{Err: err}
 			// Clean up temp file
 			if cleanupErr := os.Remove(job.TempPath); cleanupErr != nil {
-				log.Printf("Warning: failed to remove temp file %s: %v", job.TempPath, cleanupErr)
+				slog.Warn("Failed to remove temp file", "path", job.TempPath, "error", cleanupErr)
 			}
 			continue
 		}
 
 		// Clean up input temp file
 		if err := os.Remove(job.TempPath); err != nil {
-			log.Printf("Warning: failed to remove temp file %s: %v", job.TempPath, err)
+			slog.Warn("Failed to remove temp file", "path", job.TempPath, "error", err)
 		}
 
 		newDuration := int64(float64(job.Duration) / job.Speed)
@@ -123,21 +123,21 @@ func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Cobble worker shutting down...")
+			slog.Info("Cobble worker shutting down")
 			return
 		case _, ok := <-processingJobs:
 			if !ok {
 				// Channel closed
-				log.Println("Processing jobs channel closed, worker exiting")
+				slog.Info("Processing jobs channel closed, worker exiting")
 				return
 			}
 
 			if err := processRun(ctx); err != nil {
 				if err == context.Canceled {
-					log.Println("Processing cancelled")
+					slog.Info("Processing cancelled")
 					return
 				} else {
-					log.Printf("Error during processing: %v", err)
+					slog.Error("Error during processing", "error", err)
 				}
 			}
 		}
@@ -150,14 +150,14 @@ func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results [
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping upload")
+			slog.Info("Context cancelled, stopping upload")
 			return ctx.Err()
 		default:
 		}
 
 		// Skip upload for reused files that already have download_url
 		if downloadURL := result.DownloadURL; downloadURL != "" {
-			log.Printf("Skipping upload for reused file: %s", result.Title)
+			slog.Info("Skipping upload for reused file", "title", result.Title)
 			// Extract drive_file_id from download_url for consistency
 			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL); driveFileID != "" {
 				results[i].DriveFileID = driveFileID
@@ -165,7 +165,7 @@ func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results [
 			continue
 		}
 
-		log.Printf("Uploading %s to Google Drive", result.Title)
+		slog.Info("Uploading to Google Drive", "title", result.Title)
 		tempFile := result.TempFile
 		filename := fmt.Sprintf("%s.mp3", result.Title)
 
@@ -176,7 +176,7 @@ func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results [
 
 		// Clean up temp file
 		if err := os.Remove(tempFile); err != nil {
-			log.Printf("Warning: failed to remove temp file %s: %v", tempFile, err)
+			slog.Warn("Failed to remove temp file", "path", tempFile, "error", err)
 		}
 
 		results[i].DriveFileID = driveFileID
@@ -195,7 +195,7 @@ func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService *gdrive.Se
 	}
 
 	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
-	log.Printf("RSS Feed Download URL: %s", rssDownloadURL)
+	slog.Info("RSS Feed created", "download_url", rssDownloadURL)
 
 	return nil
 }
@@ -215,16 +215,16 @@ func processRun(ctx context.Context) error {
 
 	stateManager, err := state.NewStateManager(ctx)
 	if err != nil {
-		log.Printf("Failed to connect to state: %v", err)
+		slog.Error("Failed to connect to state", "error", err)
 	}
 
 	appState, err := stateManager.GetState()
 	if err != nil {
-		log.Printf("Failed to get state: %v", err)
-		log.Printf("Assuming first run")
+		slog.Error("Failed to get state", "error", err)
+		slog.Info("Assuming first run")
 		appState = &state.CobblepodState{}
 	} else {
-		log.Printf("Last run was at: %s", appState.LastRun.Format(time.RFC3339))
+		slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339))
 	}
 
 	// Get RSS feed and extract episode mapping
@@ -233,11 +233,11 @@ func processRun(ctx context.Context) error {
 	if rssFileID != "" {
 		rssContent, err := gdriveService.DownloadFile(rssFileID)
 		if err != nil {
-			log.Printf("Error downloading RSS feed: %v", err)
+			slog.Error("Error downloading RSS feed", "error", err)
 		} else {
 			episodeMapping, err = podcastProcessor.ExtractEpisodeMapping(rssContent)
 			if err != nil {
-				log.Printf("Error extracting episode mapping: %v", err)
+				slog.Error("Error extracting episode mapping", "error", err)
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func processRun(ctx context.Context) error {
 	startTime := time.Now()
 	defer func() {
 		if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
-			log.Printf("Failed to save state: %v", err)
+			slog.Error("Failed to save state", "error", err)
 		}
 	}()
 
@@ -263,7 +263,7 @@ func processRun(ctx context.Context) error {
 	// Check for new backup file
 	backupFile, err := podcastAddictBackup.GetLatest(ctx)
 	if err != nil {
-		log.Printf("Error getting latest backup file: %v", err)
+		slog.Error("Error getting latest backup file", "error", err)
 	}
 
 	newBackup := false
@@ -274,7 +274,7 @@ func processRun(ctx context.Context) error {
 	// Determine processing mode
 	var entries []sources.AudioEntry
 	if newM3U8 {
-		log.Printf("Processing M3U8 file: %s (modified: %s)", m3u8File.File.Name, m3u8File.ModifiedTime.Format(time.RFC3339))
+		slog.Info("Processing M3U8 file", "name", m3u8File.File.Name, "modified", m3u8File.ModifiedTime.Format(time.RFC3339))
 
 		entries, err = m3u8src.Process(ctx, m3u8File)
 		if err != nil {
@@ -284,7 +284,7 @@ func processRun(ctx context.Context) error {
 		// Process M3U8 as before, including backup for offsets
 		podcastAddictBackup.AddListeningProgress(ctx, entries)
 	} else if newBackup {
-		log.Printf("Processing backup independently: %s (modified: %s)", backupFile.FileName, backupFile.ModifiedTime.Format(time.RFC3339))
+		slog.Info("Processing backup independently", "name", backupFile.FileName, "modified", backupFile.ModifiedTime.Format(time.RFC3339))
 
 		// Process backup independently
 		entries, err = podcastAddictBackup.Process(ctx, backupFile)
@@ -292,11 +292,11 @@ func processRun(ctx context.Context) error {
 			return fmt.Errorf("error processing backup independently: %w", err)
 		}
 	} else {
-		log.Println("No new M3U8 or backup files found since last run")
+		slog.Debug("No new M3U8 or backup files found since last run")
 		return nil
 	}
 	if len(entries) == 0 {
-		log.Println("No entries found in M3U8 file")
+		slog.Info("No entries found in M3U8 file")
 		return nil
 	}
 
@@ -323,7 +323,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
 			if podcastProcessor.CanReuseEpisode(oldEp, duration, expectedNewDuration) {
-				log.Printf("Reusing existing processed file: %s", title)
+				slog.Info("Reusing existing processed file", "title", title)
 				result := podcast.ProcessedEpisode{
 					Title:            title,
 					OriginalDuration: duration,
@@ -339,7 +339,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		}
 
 		// Send request and wait for response
-		log.Printf("Enqueuing download for %s (%s)", title, entry.URL)
+		slog.Info("Enqueuing download", "title", title, "url", entry.URL)
 		dlRequests <- downloadReq{Idx: i, URL: entry.URL}
 	}
 	// all done sending jobs
@@ -361,14 +361,14 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
-			log.Printf("Context cancelled, stopping processing")
+			slog.Info("Context cancelled, stopping processing")
 			return ctx.Err()
 		default:
 		}
 
 		// Process the result
 		if res.Err != nil {
-			log.Printf("Download failed: %v", res.Err)
+			slog.Error("Download failed", "error", res.Err)
 			continue
 		}
 
@@ -392,18 +392,18 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 	var newResults []podcast.ProcessedEpisode
 	for ffmpegRes := range ffmpegResults {
 		if ffmpegRes.Err != nil {
-			log.Printf("FFmpeg processing failed: %v", ffmpegRes.Err)
+			slog.Error("FFmpeg processing failed", "error", ffmpegRes.Err)
 			continue
 		}
 		newResults = append(newResults, ffmpegRes.Result)
 	}
 
 	if len(newResults) == 0 {
-		log.Println("Skipping uploads since no audio entries successfully processed")
+		slog.Info("Skipping uploads since no audio entries successfully processed")
 		return nil
 	}
 	results = append(results, newResults...)
-	log.Printf("Processed %d audio files", len(results))
+	slog.Info("Processing completed", "processed_files", len(results))
 
 	// Upload processed files to Google Drive
 	if err := uploadResults(ctx, gdriveService, results); err != nil {
@@ -412,13 +412,19 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 
 	// Create and upload RSS XML feed and save state
 	if err := updateFeed(podcastProcessor, gdriveService, results); err != nil {
-		log.Printf("Failed to update feed: %v", err)
+		slog.Error("Failed to update feed", "error", err)
 	}
 
 	return nil
 }
 
 func main() {
+	// Initialize structured logging with JSON handler
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	slog.SetDefault(slog.New(jsonHandler))
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -437,23 +443,23 @@ func main() {
 	// Start the processing worker
 	go cobbleWorker(ctx, processingJobs)
 
-	log.Printf("Starting cobblepod with %d second polling interval", config.PollInterval)
+	slog.Info("Starting cobblepod", "poll_interval_seconds", config.PollInterval)
 	processingJobs <- struct{}{}
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Context cancelled, shutting down...")
+			slog.Info("Context cancelled, shutting down")
 			return
 		case sig := <-sigChan:
-			log.Printf("Received signal %v, shutting down gracefully...", sig)
+			slog.Info("Received signal, shutting down gracefully", "signal", sig)
 			cancel()
 			return
 		case <-ticker.C:
 			select {
 			case processingJobs <- struct{}{}:
 			default:
-				log.Printf("Skipping processing - queue is full")
+				slog.Warn("Skipping processing - queue is full")
 			}
 		}
 	}

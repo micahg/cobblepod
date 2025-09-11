@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"strings"
@@ -61,7 +61,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries 
 	}
 
 	latest := files[0]
-	log.Printf("Found PodcastAddict backup candidate: %s (modified %s)", latest.Name, latest.ModifiedTime)
+	slog.Info("Found PodcastAddict backup candidate", "name", latest.Name, "modified", latest.ModifiedTime)
 
 	backup, err := p.drive.DownloadFileToTemp(latest.Id)
 	if err != nil {
@@ -97,7 +97,7 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 		return nil, errors.New("no backup file provided")
 	}
 
-	log.Printf("Processing PodcastAddict backup: %s (modified %s)", backupFile.FileName, backupFile.ModifiedTime)
+	slog.Info("Processing PodcastAddict backup", "name", backupFile.FileName, "modified", backupFile.ModifiedTime)
 
 	backup, err := p.drive.DownloadFileToTemp(backupFile.File.Id)
 	if err != nil {

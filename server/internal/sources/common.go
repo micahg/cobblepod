@@ -3,7 +3,7 @@ package sources
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"cobblepod/internal/gdrive"
@@ -46,7 +46,7 @@ func GetLatestFile(ctx context.Context, drive *gdrive.Service, query string, fil
 	// Parse the modified time
 	modifiedTime, err := time.Parse(time.RFC3339, mostRecentFile.ModifiedTime)
 	if err != nil {
-		log.Printf("Warning: couldn't parse modified time for %s: %v", mostRecentFile.Name, err)
+		slog.Warn("Couldn't parse modified time", "file", mostRecentFile.Name, "error", err)
 		modifiedTime = time.Time{} // Zero time as fallback
 	}
 

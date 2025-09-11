@@ -5,7 +5,7 @@ import (
 	"cobblepod/internal/gdrive"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -53,7 +53,7 @@ func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]AudioEn
 		return nil, fmt.Errorf("no audio files found in M3U8 playlist")
 	}
 
-	log.Printf("Parsed %d audio entries from M3U8", len(audioEntries))
+	slog.Info("Parsed audio entries from M3U8", "count", len(audioEntries))
 	return audioEntries, nil
 }
 

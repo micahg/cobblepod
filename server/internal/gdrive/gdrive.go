@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"regexp"
 	"strings"
@@ -38,7 +38,7 @@ func NewService(ctx context.Context) (*Service, error) {
 		return nil, fmt.Errorf("failed to create Drive service: %w", err)
 	}
 
-	log.Printf("Google Drive service initialized with project: %s", config.ProjectID)
+	slog.Info("Google Drive service initialized", "project_id", config.ProjectID)
 	return &Service{drive: service}, nil
 }
 
@@ -89,7 +89,7 @@ func (s *Service) GetMostRecentFile(files []*drive.File) *drive.File {
 
 		modifiedTime, err := time.Parse(time.RFC3339, file.ModifiedTime)
 		if err != nil {
-			log.Printf("Could not parse modifiedTime '%s' for file %s: %v", file.ModifiedTime, file.Name, err)
+			slog.Warn("Could not parse modifiedTime", "time", file.ModifiedTime, "file", file.Name, "error", err)
 			continue
 		}
 
@@ -177,7 +177,7 @@ func (s *Service) UploadFile(filePath, filename, mimeType string) (string, error
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
 
-	log.Printf("File uploaded successfully: %s (ID: %s)", filename, createdFile.Id)
+	slog.Info("File uploaded successfully", "filename", filename, "id", createdFile.Id)
 
 	// Set permissions
 	if err := s.setFilePermissions(createdFile.Id, filename); err != nil {
@@ -225,7 +225,7 @@ func (s *Service) setFilePermissions(fileID, filename string) error {
 		Role: "reader",
 	}
 
-	log.Printf("Setting permissions for %s (ID: %s)", filename, fileID)
+	slog.Info("Setting permissions", "filename", filename, "id", fileID)
 	_, err := s.drive.Permissions.Create(fileID, permission).Do()
 	return err
 }
