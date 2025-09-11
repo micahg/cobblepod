@@ -121,6 +121,27 @@ func (s *Service) FileExists(fileID string) (bool, error) {
 	return true, nil
 }
 
+// DeleteFile deletes a file from Google Drive by ID
+func (s *Service) DeleteFile(fileID string) error {
+	if fileID == "" {
+		return fmt.Errorf("file ID is empty")
+	}
+
+	slog.Info("Deleting file from Google Drive", "id", fileID)
+
+	err := s.drive.Files.Delete(fileID).Do()
+	if err != nil {
+		// Check if it's a "not found" error
+		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "File not found") {
+			return fmt.Errorf("file not found: %s", fileID)
+		}
+		return fmt.Errorf("failed to delete file %s: %w", fileID, err)
+	}
+
+	slog.Info("File deleted successfully", "id", fileID)
+	return nil
+}
+
 // DownloadFile downloads a file and returns its content as a string
 func (s *Service) DownloadFile(fileID string) (string, error) {
 	resp, err := s.drive.Files.Get(fileID).Download()

@@ -300,10 +300,35 @@ func processRun(ctx context.Context) error {
 		return nil
 	}
 
-	return processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
+	reused, err := processEntries(ctx, entries, episodeMapping, gdriveService, processor, podcastProcessor)
+	if err != nil {
+		return err
+	}
+
+	// Delete unused episodes from Google Drive
+	deleteUnusedEpisodes(gdriveService, episodeMapping, reused)
+
+	return nil
 }
 
-func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *gdrive.Service, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) error {
+// deleteUnusedEpisodes removes episodes from Google Drive that are no longer in the current playlist
+func deleteUnusedEpisodes(gdriveService *gdrive.Service, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
+	// Delete episodes that are not reused
+	for title, episode := range episodeMapping {
+		if _, ok := reused[title]; ok {
+			continue
+		}
+		driveId := gdriveService.ExtractFileIDFromURL(episode.DownloadURL)
+		if driveId == "" {
+			slog.Warn("Could not extract Drive file ID from URL", "url", episode.DownloadURL)
+			continue
+		}
+		gdriveService.DeleteFile(driveId)
+	}
+}
+
+// returns the reused episodes
+func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *gdrive.Service, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
 	var results []podcast.ProcessedEpisode
 
@@ -314,6 +339,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 
 	speed := config.DefaultSpeed
 
+	reused := make(map[string]podcast.ExistingEpisode)
 	// First pass: reuse check; enqueue downloads for the rest
 	for i, entry := range entries {
 		title := entry.Title
@@ -324,6 +350,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		if oldEp, exists := episodeMapping[title]; exists {
 			if podcastProcessor.CanReuseEpisode(oldEp, duration, expectedNewDuration) {
 				slog.Info("Reusing existing processed file", "title", title)
+				reused[title] = oldEp
 				result := podcast.ProcessedEpisode{
 					Title:            title,
 					OriginalDuration: duration,
@@ -362,7 +389,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		select {
 		case <-ctx.Done():
 			slog.Info("Context cancelled, stopping processing")
-			return ctx.Err()
+			return nil, ctx.Err()
 		default:
 		}
 
@@ -400,14 +427,14 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 
 	if len(newResults) == 0 {
 		slog.Info("Skipping uploads since no audio entries successfully processed")
-		return nil
+		return nil, nil
 	}
 	results = append(results, newResults...)
 	slog.Info("Processing completed", "processed_files", len(results))
 
 	// Upload processed files to Google Drive
 	if err := uploadResults(ctx, gdriveService, results); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Create and upload RSS XML feed and save state
@@ -415,7 +442,7 @@ func processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMa
 		slog.Error("Failed to update feed", "error", err)
 	}
 
-	return nil
+	return reused, nil
 }
 
 func main() {
