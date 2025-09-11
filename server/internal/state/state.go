@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"cobblepod/internal/config"
@@ -23,7 +23,7 @@ type CobblepodStateManager struct {
 // NewStateManager creates a new state connection using pure Go redis client
 func NewStateManager(ctx context.Context) (*CobblepodStateManager, error) {
 	addr := fmt.Sprintf("%s:%d", config.ValkeyHost, config.ValkeyPort)
-	log.Printf("Connecting to Valkey at %s", addr)
+	slog.Debug("Connecting to Valkey", "addr", addr)
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: "", // Add to config if needed
@@ -49,13 +49,13 @@ func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
 
 	stateStr, err := sm.client.Get(context.Background(), "state").Result()
 	if err != nil {
-		log.Printf("Error getting state: %v", err)
+		slog.Error("Error getting state", "error", err)
 		return &CobblepodState{LastRun: time.Unix(0, 0)}, err
 	}
 
 	var state CobblepodState
 	if err := json.Unmarshal([]byte(stateStr), &state); err != nil {
-		log.Printf("Error unmarshalling state: %v", err)
+		slog.Error("Error unmarshalling state", "error", err)
 		return nil, err
 	}
 	return &state, nil

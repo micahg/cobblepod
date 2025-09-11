@@ -3,7 +3,7 @@ package podcast
 import (
 	"encoding/xml"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -119,7 +119,7 @@ func (p *RSSProcessor) CreateRSSXML(processedFiles []ProcessedEpisode) string {
 
 	xmlBytes, err := xml.MarshalIndent(rss, "", "  ")
 	if err != nil {
-		log.Printf("Error marshaling RSS XML: %v", err)
+		slog.Error("Error marshaling RSS XML", "error", err)
 		return ""
 	}
 	return fmt.Sprintf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>%s%s", "\n", string(xmlBytes))
@@ -155,7 +155,7 @@ func (p *RSSProcessor) createItemFromFile(fileData ProcessedEpisode) Item {
 func (p *RSSProcessor) GetRSSFeedID() string {
 	files, err := p.drive.GetFiles(config.RSSQuery, true)
 	if err != nil {
-		log.Printf("Error searching for RSS feed: %v", err)
+		slog.Error("Error searching for RSS feed", "error", err)
 		return ""
 	}
 	if len(files) == 0 {
@@ -180,12 +180,12 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 
 		originalDuration, err := strconv.ParseInt(item.OriginalDuration, 10, 64)
 		if err != nil {
-			log.Printf("Warning: invalid original duration for episode '%s': %v", title, err)
+			slog.Warn("Invalid original duration for episode", "title", title, "error", err)
 			originalDuration = 0
 		}
 		length, err := strconv.ParseInt(item.Enclosure.Length, 10, 64)
 		if err != nil {
-			log.Printf("Warning: invalid length for episode '%s': %v", title, err)
+			slog.Warn("Invalid length for episode", "title", title, "error", err)
 			length = 0
 		}
 
@@ -205,7 +205,7 @@ func (p *RSSProcessor) CanReuseEpisode(oldEp ExistingEpisode, duration, expected
 	fileId := p.drive.ExtractFileIDFromURL(oldEp.DownloadURL)
 	reallyExists, err := p.drive.FileExists(fileId)
 	if err != nil {
-		log.Printf("Error checking if file exists: %v", err)
+		slog.Error("Error checking if file exists", "error", err)
 	}
 	return reallyExists && oldEp.OriginalDuration == duration && oldEp.Length == expectedNewDuration
 }

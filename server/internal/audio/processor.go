@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -43,7 +43,7 @@ func NewProcessor() *Processor {
 
 // downloadAudioFile downloads an audio file from URL to local path
 func (p *Processor) downloadAudioFile(ctx context.Context, url, outputPath string) error {
-	log.Printf("Downloading audio from: %s", url)
+	slog.Info("Downloading audio", "url", url)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -100,14 +100,14 @@ func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outpu
 		outputPath,
 	)
 
-	log.Printf("Executing FFmpeg command: %s", strings.Join(args, " "))
+	slog.Info("Executing FFmpeg command", "command", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("FFmpeg error: %w, output: %s", err, string(output))
 	}
-	log.Printf("FFmpeg processing completed: %s", outputPath)
+	slog.Info("FFmpeg processing completed", "output_path", outputPath)
 
 	return nil
 }
