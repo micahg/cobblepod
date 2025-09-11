@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"cobblepod/internal/podcast"
@@ -215,36 +214,4 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 			t.Errorf("Expected no deletions when episode is reused (regardless of data differences), got %d", len(deletedFiles))
 		}
 	})
-}
-
-func BenchmarkDeleteUnusedEpisodes(b *testing.B) {
-	// Setup test data
-	mockService := NewMockGDriveService()
-
-	episodeMapping := make(map[string]podcast.ExistingEpisode, 1000)
-	reused := make(map[string]podcast.ExistingEpisode, 500)
-
-	// Create 1000 episodes, reuse 500 of them
-	for i := 0; i < 1000; i++ {
-		title := fmt.Sprintf("Episode %d", i)
-		url := fmt.Sprintf("https://drive.google.com/file/d/file%d", i)
-		id := fmt.Sprintf("file%d", i)
-
-		episode := podcast.ExistingEpisode{DownloadURL: url}
-		episodeMapping[title] = episode
-		mockService.SetURLToIDMapping(url, id)
-
-		// Reuse every other episode
-		if i%2 == 0 {
-			reused[title] = episode
-		}
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		// Reset the mock for each iteration
-		mockService.deletedFiles = make([]string, 0)
-		deleteUnusedEpisodes(mockService, episodeMapping, reused)
-	}
 }
