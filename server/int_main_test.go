@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
 )
 
 // TODO move this to testing
@@ -41,6 +43,15 @@ func TestBigOne(t *testing.T) {
 			},
 		}, "fields=files%28id%2C+name%2C+modifiedTime%29")
 		defer mockServer.Close()
+
+		ctx := context.Background()
+
+		driveService, err := drive.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(mockServer.URL))
+		if err != nil {
+			t.Fatalf("Failed to create drive service: %v", err)
+		}
 		fmt.Println("Running BIG ONE test")
+
+		processRun(context.Background())
 	})
 }
