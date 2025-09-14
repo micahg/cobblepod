@@ -451,12 +451,12 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	slog.Info("Processing completed", "processed_files", len(results))
 
 	// Upload processed files to Google Drive
-	if err := uploadResults(ctx, gdriveService, results); err != nil {
+	if err := uploadResults(ctx, p.storage, results); err != nil {
 		return nil, err
 	}
 
 	// Create and upload RSS XML feed and save state
-	if err := updateFeed(podcastProcessor, gdriveService, results); err != nil {
+	if err := updateFeed(podcastProcessor, p.storage, results); err != nil {
 		slog.Error("Failed to update feed", "error", err)
 	}
 
