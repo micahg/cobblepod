@@ -54,7 +54,10 @@ func TestBigOne(t *testing.T) {
 		}
 		fmt.Println("Running BIG ONE test")
 
-		proc := processor.NewProcessor()
+		proc, err := processor.NewProcessor(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to create processor: %v", err)
+		}
 		proc.Run(context.Background())
 	})
 }

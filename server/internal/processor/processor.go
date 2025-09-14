@@ -55,36 +55,44 @@ type GDriveDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	gdriveServiceFactory func(ctx context.Context) (*gdrive.Service, error)
-	stateManagerFactory  func(ctx context.Context) (*state.CobblepodStateManager, error)
+	gdriveService *gdrive.Service
+	stateManager  *state.CobblepodStateManager
 }
 
 // NewProcessor creates a new processor with default dependencies
-func NewProcessor() *Processor {
-	return &Processor{
-		gdriveServiceFactory: gdrive.NewService,
-		stateManagerFactory:  state.NewStateManager,
+func NewProcessor(ctx context.Context) (*Processor, error) {
+	gdriveService, err := gdrive.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error setting up Google Drive: %w", err)
 	}
+
+	stateManager, err := state.NewStateManager(ctx)
+	if err != nil {
+		slog.Error("Failed to connect to state", "error", err)
+		// Continue with nil state manager - we'll handle this in Run()
+	}
+
+	return &Processor{
+		gdriveService: gdriveService,
+		stateManager:  stateManager,
+	}, nil
 }
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	gdriveServiceFactory func(ctx context.Context) (*gdrive.Service, error),
-	stateManagerFactory func(ctx context.Context) (*state.CobblepodStateManager, error),
+	gdriveService *gdrive.Service,
+	stateManager *state.CobblepodStateManager,
 ) *Processor {
 	return &Processor{
-		gdriveServiceFactory: gdriveServiceFactory,
-		stateManagerFactory:  stateManagerFactory,
+		gdriveService: gdriveService,
+		stateManager:  stateManager,
 	}
 }
 
 // Run executes the main processing logic
 func (p *Processor) Run(ctx context.Context) error {
-	// Initialize Google Drive service
-	gdriveService, err := p.gdriveServiceFactory(ctx)
-	if err != nil {
-		return fmt.Errorf("error setting up Google Drive: %w", err)
-	}
+	// Use the stored Google Drive service
+	gdriveService := p.gdriveService
 
 	m3u8src := sources.NewM3U8Source(gdriveService)
 	podcastAddictBackup := sources.NewPodcastAddictBackup(gdriveService)
@@ -92,18 +100,23 @@ func (p *Processor) Run(ctx context.Context) error {
 	audioProcessor := audio.NewProcessor()
 	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", gdriveService)
 
-	stateManager, err := p.stateManagerFactory(ctx)
-	if err != nil {
-		slog.Error("Failed to connect to state", "error", err)
-	}
+	// Use the stored state manager
+	stateManager := p.stateManager
+	var appState *state.CobblepodState
 
-	appState, err := stateManager.GetState()
-	if err != nil {
-		slog.Error("Failed to get state", "error", err)
-		slog.Info("Assuming first run")
-		appState = &state.CobblepodState{}
+	if stateManager != nil {
+		var err error
+		appState, err = stateManager.GetState()
+		if err != nil {
+			slog.Error("Failed to get state", "error", err)
+			slog.Info("Assuming first run")
+			appState = &state.CobblepodState{}
+		} else {
+			slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339))
+		}
 	} else {
-		slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339))
+		slog.Info("State manager not available, assuming first run")
+		appState = &state.CobblepodState{}
 	}
 
 	// Get RSS feed and extract episode mapping
@@ -123,8 +136,10 @@ func (p *Processor) Run(ctx context.Context) error {
 
 	startTime := time.Now()
 	defer func() {
-		if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
-			slog.Error("Failed to save state", "error", err)
+		if stateManager != nil {
+			if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+				slog.Error("Failed to save state", "error", err)
+			}
 		}
 	}()
 

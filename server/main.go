@@ -14,7 +14,11 @@ import (
 
 // cobbleWorker handles processing job requests
 func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
-	proc := processor.NewProcessor()
+	proc, err := processor.NewProcessor(ctx)
+	if err != nil {
+		slog.Error("Failed to create processor", "error", err)
+		return
+	}
 
 	for {
 		select {
