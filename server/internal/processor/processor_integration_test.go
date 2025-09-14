@@ -1,4 +1,4 @@
-package main
+package processor
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"cobblepod/internal/processor"
 
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -54,7 +52,7 @@ func TestBigOne(t *testing.T) {
 		}
 		fmt.Println("Running BIG ONE test")
 
-		proc, err := processor.NewProcessor(context.Background())
+		proc, err := NewProcessor(context.Background())
 		if err != nil {
 			t.Fatalf("Failed to create processor: %v", err)
 		}
