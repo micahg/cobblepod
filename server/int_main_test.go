@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"cobblepod/internal/processor"
+
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 )
@@ -46,12 +48,13 @@ func TestBigOne(t *testing.T) {
 
 		ctx := context.Background()
 
-		driveService, err := drive.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(mockServer.URL))
+		_, err := drive.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(mockServer.URL))
 		if err != nil {
 			t.Fatalf("Failed to create drive service: %v", err)
 		}
 		fmt.Println("Running BIG ONE test")
 
-		processRun(context.Background())
+		proc := processor.NewProcessor()
+		proc.Run(context.Background())
 	})
 }
