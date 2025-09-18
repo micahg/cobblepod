@@ -1,4 +1,4 @@
-package gdrive
+package storage
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func TestGetFiles(t *testing.T) {
 	}
 
 	// Create our Service wrapper
-	service := &Service{drive: driveService}
+	service := &GDrive{drive: driveService}
 
 	// Test the GetFiles method
 	files, err := service.GetFiles("name contains 'test'", false)
@@ -102,7 +102,7 @@ func TestGetFilesMostRecent(t *testing.T) {
 	}
 
 	// Create our Service wrapper
-	service := &Service{drive: driveService}
+	service := &GDrive{drive: driveService}
 
 	// Test the GetFiles method with mostRecent=true
 	files, err := service.GetFiles("name contains 'latest'", true)

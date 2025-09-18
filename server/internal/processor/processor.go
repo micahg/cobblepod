@@ -10,10 +10,10 @@ import (
 
 	"cobblepod/internal/audio"
 	"cobblepod/internal/config"
-	"cobblepod/internal/gdrive"
 	"cobblepod/internal/podcast"
 	"cobblepod/internal/sources"
 	"cobblepod/internal/state"
+	"cobblepod/internal/storage"
 )
 
 // downloadReq represents a download request
@@ -55,13 +55,13 @@ type GDriveDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	storage *gdrive.Service
+	storage *storage.GDrive
 	state   *state.CobblepodStateManager
 }
 
 // NewProcessor creates a new processor with default dependencies
 func NewProcessor(ctx context.Context) (*Processor, error) {
-	storage, err := gdrive.NewService(ctx)
+	storage, err := storage.NewService(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error setting up Google Drive: %w", err)
 	}
@@ -80,7 +80,7 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	storage *gdrive.Service,
+	storage *storage.GDrive,
 	state *state.CobblepodStateManager,
 ) *Processor {
 	return &Processor{
@@ -274,7 +274,7 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 }
 
 // uploadResults handles uploading processed audio files to Google Drive
-func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results []podcast.ProcessedEpisode) error {
+func uploadResults(ctx context.Context, gdriveService *storage.GDrive, results []podcast.ProcessedEpisode) error {
 	for i, result := range results {
 		// Check if context was cancelled
 		select {
@@ -315,7 +315,7 @@ func uploadResults(ctx context.Context, gdriveService *gdrive.Service, results [
 }
 
 // updateFeed creates and uploads the RSS XML feed and saves the application state
-func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService *gdrive.Service, results []podcast.ProcessedEpisode) error {
+func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService *storage.GDrive, results []podcast.ProcessedEpisode) error {
 	// Create and upload RSS XML
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
 	rssFileID, err := gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
@@ -341,12 +341,15 @@ func (p *Processor) deleteUnusedEpisodes(gdriveService GDriveDeleter, episodeMap
 			slog.Warn("Could not extract Drive file ID from URL", "url", episode.DownloadURL)
 			continue
 		}
-		gdriveService.DeleteFile(driveId)
+		slog.Info("Deleting unused episode from Google Drive", "title", title, "drive_id", driveId)
+		if err := gdriveService.DeleteFile(driveId); err != nil {
+			slog.Error("Failed to delete file from Google Drive", "drive_id", driveId, "error", err)
+		}
 	}
 }
 
 // processEntries returns the reused episodes
-func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *gdrive.Service, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
+func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *storage.GDrive, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
 	var results []podcast.ProcessedEpisode
 

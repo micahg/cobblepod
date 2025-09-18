@@ -2,7 +2,7 @@ package sources
 
 import (
 	"cobblepod/internal/config"
-	"cobblepod/internal/gdrive"
+	"cobblepod/internal/storage"
 	"context"
 	"fmt"
 	"log/slog"
@@ -15,13 +15,13 @@ import (
 )
 
 type M3U8Source struct {
-	drive          *gdrive.Service
+	drive          *storage.GDrive
 	mutex          sync.RWMutex
 	processedFiles map[string]bool
 }
 
 // NewProcessor creates a new audio processor
-func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
+func NewM3U8Source(driveService *storage.GDrive) *M3U8Source {
 	return &M3U8Source{
 		drive:          driveService,
 		processedFiles: make(map[string]bool),

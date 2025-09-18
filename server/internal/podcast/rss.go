@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"cobblepod/internal/config"
-	"cobblepod/internal/gdrive"
+	"cobblepod/internal/storage"
 )
 
 // RSS represents the root RSS element
@@ -63,7 +63,7 @@ type Enclosure struct {
 // RSSProcessor handles RSS feed generation and processing
 type RSSProcessor struct {
 	channelTitle string
-	drive        *gdrive.Service
+	drive        *storage.GDrive
 }
 
 // ProcessedEpisode represents a processed audio episode
@@ -89,7 +89,7 @@ type ExistingEpisode struct {
 }
 
 // NewRSSProcessor creates a new RSS processor
-func NewRSSProcessor(channelTitle string, driveService *gdrive.Service) *RSSProcessor {
+func NewRSSProcessor(channelTitle string, driveService *storage.GDrive) *RSSProcessor {
 	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
 }
 
