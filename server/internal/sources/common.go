@@ -19,11 +19,11 @@ type FileInfo struct {
 
 // AudioEntry represents an audio entry from various sources (M3U8 playlist, backup, etc.)
 type AudioEntry struct {
-	Title    string `json:"title"`
-	Duration int64  `json:"duration"`
-	URL      string `json:"url"`
-	UUID     string `json:"uuid"`
-	Offset   int64  `json:"offset,omitempty"` // Listening offset in seconds
+	Title    string        `json:"title"`
+	Duration time.Duration `json:"duration"`
+	URL      string        `json:"url"`
+	UUID     string        `json:"uuid"`
+	Offset   time.Duration `json:"offset,omitempty"` // Listening offset
 }
 
 // GetLatestFile is a common function to get the most recent file matching a query

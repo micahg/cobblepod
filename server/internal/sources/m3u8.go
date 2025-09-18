@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -68,7 +69,7 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 			re := regexp.MustCompile(`^#EXTINF:([0-9.]+),(.+)$`)
 			matches := re.FindStringSubmatch(line)
 			if len(matches) == 3 {
-				duration, err := strconv.ParseInt(matches[1], 10, 64)
+				durationSeconds, err := strconv.ParseFloat(matches[1], 64)
 				if err != nil {
 					continue
 				}
@@ -79,7 +80,7 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 					if url != "" && !strings.HasPrefix(url, "#") {
 						entries = append(entries, AudioEntry{
 							Title:    title,
-							Duration: duration,
+							Duration: time.Duration(durationSeconds * float64(time.Second)),
 							URL:      url,
 							UUID:     uuid.New().String(),
 						})

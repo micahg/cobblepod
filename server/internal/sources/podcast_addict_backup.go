@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -24,7 +25,7 @@ import (
 type ListeningProgress struct {
 	Podcast string
 	Episode string
-	Offset  int64
+	Offset  time.Duration
 }
 
 // PodcastAddictBackup handles extraction of listening progress from Podcast Addict backups.
@@ -122,8 +123,6 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 // without the position_to_resume > 0 filter for independent backup processing.
 func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, error) {
 	// Open read-only using a proper file URI to avoid accidental writes.
-
-	/// TODO make offset and duration ACTUAL durations
 	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
 	dsn := u.String()
 	db, err := sql.Open("sqlite", dsn)
@@ -158,11 +157,14 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 		var ae AudioEntry
 		var podcast string
 		var episode string
-		if err := rows.Scan(&podcast, &ae.URL, &ae.Offset, &ae.Duration, &episode); err != nil {
+		var offsetMs, durationMs int64
+		if err := rows.Scan(&podcast, &ae.URL, &offsetMs, &durationMs, &episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		ae.Title = fmt.Sprintf("%s - %s", podcast, episode)
 		ae.UUID = uuid.New().String()
+		ae.Offset = time.Duration(offsetMs) * time.Millisecond
+		ae.Duration = time.Duration(durationMs) * time.Millisecond
 		results = append(results, ae)
 	}
 	if err := rows.Err(); err != nil {
@@ -250,9 +252,11 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 	results := make([]ListeningProgress, 0, 64)
 	for rows.Next() {
 		var lp ListeningProgress
-		if err := rows.Scan(&lp.Podcast, &lp.Offset, &lp.Episode); err != nil {
+		var offsetMs int64
+		if err := rows.Scan(&lp.Podcast, &offsetMs, &lp.Episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
+		lp.Offset = time.Duration(offsetMs) * time.Millisecond
 		results = append(results, lp)
 	}
 	if err := rows.Err(); err != nil {
