@@ -79,15 +79,14 @@ func (p *Processor) downloadAudioFile(ctx context.Context, url, outputPath strin
 }
 
 // processAudioWithFFmpeg processes audio with FFmpeg
-func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outputPath string, speed float64, offset int64) error {
+func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outputPath string, speed float64, offset time.Duration) error {
 	args := []string{"ffmpeg"}
 
 	// Add seek offset if non-zero
 	if offset > 0 {
-		d := time.Duration(offset) * time.Millisecond
-		hours := int(d.Hours())
-		minutes := int(d.Minutes()) % 60
-		seconds := int(d.Seconds()) % 60
+		hours := int(offset.Hours())
+		minutes := int(offset.Minutes()) % 60
+		seconds := int(offset.Seconds()) % 60
 		hms := fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 		args = append(args, "-ss", hms)
 	}
@@ -133,7 +132,7 @@ func (p *Processor) DownloadFile(url string) (string, error) {
 }
 
 // ProcessAudio processes audio file with FFmpeg and returns output path
-func (p *Processor) ProcessAudio(inputPath string, speed float64, offset int64) (string, error) {
+func (p *Processor) ProcessAudio(inputPath string, speed float64, offset time.Duration) (string, error) {
 	// Create temp output file
 	outputFile, err := os.CreateTemp("", "cobblepod_processed_*.mp3")
 	if err != nil {
