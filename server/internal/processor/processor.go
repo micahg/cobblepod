@@ -365,6 +365,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	for i, entry := range entries {
 		title := entry.Title
 		duration := entry.Duration
+		// i don't think this is right either anymore - we're using duration (ns) now, no milliseconds
 		expectedNewDuration := int64(float64(duration.Milliseconds()) / speed)
 
 		// Reuse check
@@ -448,7 +449,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 
 	if len(newResults) == 0 {
 		slog.Info("Skipping uploads since no audio entries successfully processed")
-		return nil, nil
+		return reused, nil
 	}
 	results = append(results, newResults...)
 	slog.Info("Processing completed", "processed_files", len(results))
