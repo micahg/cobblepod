@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cobblepod/internal/config"
+	"cobblepod/internal/sources"
 	"cobblepod/internal/storage"
 )
 
@@ -68,24 +69,24 @@ type RSSProcessor struct {
 
 // ProcessedEpisode represents a processed audio episode
 type ProcessedEpisode struct {
-	Title            string  `json:"title"`
-	OriginalURL      string  `json:"original_url,omitempty"`
-	OriginalDuration int64   `json:"original_duration"`
-	NewDuration      int64   `json:"new_duration"`
-	UUID             string  `json:"uuid"`
-	Speed            float64 `json:"speed"`
-	DownloadURL      string  `json:"download_url,omitempty"`
-	OriginalGUID     string  `json:"original_guid,omitempty"`
-	TempFile         string  `json:"temp_file,omitempty"`
-	DriveFileID      string  `json:"drive_file_id,omitempty"`
+	Title            string        `json:"title"`
+	OriginalURL      string        `json:"original_url,omitempty"`
+	OriginalDuration time.Duration `json:"original_duration"` // Duration in milliseconds
+	NewDuration      time.Duration `json:"new_duration"`      // Duration in milliseconds
+	UUID             string        `json:"uuid"`
+	Speed            float64       `json:"speed"`
+	DownloadURL      string        `json:"download_url,omitempty"`
+	OriginalGUID     string        `json:"original_guid,omitempty"`
+	TempFile         string        `json:"temp_file,omitempty"`
+	DriveFileID      string        `json:"drive_file_id,omitempty"`
 }
 
 // ExistingEpisode represents an episode from existing RSS feed or backup data
 type ExistingEpisode struct {
-	DownloadURL      string `json:"download_url"`
-	Length           int64  `json:"length"`
-	OriginalDuration int64  `json:"original_duration"`
-	OriginalGUID     string `json:"original_guid,omitempty"`
+	DownloadURL      string        `json:"download_url"`
+	Duration         time.Duration `json:"length"`            // Duration accounting for speed and offset
+	OriginalDuration time.Duration `json:"original_duration"` // Unmodified duration of the existing episode
+	OriginalGUID     string        `json:"original_guid,omitempty"`
 }
 
 // NewRSSProcessor creates a new RSS processor
@@ -146,8 +147,8 @@ func (p *RSSProcessor) createItemFromFile(fileData ProcessedEpisode) Item {
 	return Item{
 		Title:            title,
 		GUID:             GUID{IsPermaLink: "false", Value: guid},
-		OriginalDuration: strconv.FormatInt(originalDuration, 10),
-		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.FormatInt(newDuration, 10)},
+		OriginalDuration: strconv.FormatInt(originalDuration.Milliseconds(), 10),
+		Enclosure:        Enclosure{URL: downloadURL, Type: "audio/mpeg", Length: strconv.FormatInt(newDuration.Milliseconds(), 10)},
 	}
 }
 
@@ -191,8 +192,8 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 
 		episode := ExistingEpisode{
 			DownloadURL:      item.Enclosure.URL,
-			Length:           length,
-			OriginalDuration: originalDuration,
+			Duration:         time.Duration(length) * time.Millisecond,
+			OriginalDuration: time.Duration(originalDuration) * time.Millisecond,
 			OriginalGUID:     item.GUID.Value,
 		}
 
@@ -201,13 +202,26 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 	return episodeMapping, nil
 }
 
-func (p *RSSProcessor) CanReuseEpisode(oldEp ExistingEpisode, duration, expectedNewDuration int64) bool {
+func (p *RSSProcessor) CanReuseEpisode(newEp sources.AudioEntry, oldEp ExistingEpisode, speed float64) bool {
+	// AudioEntry
+	//   Duration -> original duration
+	//   Offset -> offset into the duration
+	//
+	// ExistingEpisode
+	//   OriginalDuration -> original duration
+	//   Duration -> previously proceed length (includes offset and speed)
+	//
+	// need modified duration from playlist
+	newDuration := time.Duration(float64((newEp.Duration - newEp.Offset).Nanoseconds()) / speed)
+
 	fileId := p.drive.ExtractFileIDFromURL(oldEp.DownloadURL)
 	reallyExists, err := p.drive.FileExists(fileId)
 	if err != nil {
 		slog.Error("Error checking if file exists", "error", err)
 	}
-	return reallyExists && oldEp.OriginalDuration == duration && oldEp.Length == expectedNewDuration
+
+	// for new duration, use milliseconds since thats the value all the files contain (eg: the XML RSS duration)
+	return reallyExists && oldEp.OriginalDuration == newEp.Duration && oldEp.Duration.Milliseconds() == newDuration.Milliseconds()
 }
 
 func hashString(s string) int {

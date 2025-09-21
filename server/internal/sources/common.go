@@ -20,7 +20,7 @@ type FileInfo struct {
 // AudioEntry represents an audio entry from various sources (M3U8 playlist, backup, etc.)
 type AudioEntry struct {
 	Title    string        `json:"title"`
-	Duration time.Duration `json:"duration"`
+	Duration time.Duration `json:"duration"` // Unmodified duration of the audio entry
 	URL      string        `json:"url"`
 	UUID     string        `json:"uuid"`
 	Offset   time.Duration `json:"offset,omitempty"` // Listening offset

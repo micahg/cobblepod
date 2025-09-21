@@ -259,10 +259,10 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 			slog.Warn("Failed to remove temp file", "path", job.TempPath, "error", err)
 		}
 
-		newDuration := int64(float64(job.Duration.Milliseconds()) / job.Speed)
+		newDuration := time.Duration(float64((job.Duration - job.Offset).Nanoseconds()) / job.Speed)
 		result := podcast.ProcessedEpisode{
 			Title:            job.Title,
-			OriginalDuration: job.Duration.Milliseconds(),
+			OriginalDuration: job.Duration,
 			NewDuration:      newDuration,
 			UUID:             job.UUID,
 			Speed:            job.Speed,
@@ -364,19 +364,16 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	// First pass: reuse check; enqueue downloads for the rest
 	for i, entry := range entries {
 		title := entry.Title
-		duration := entry.Duration
-		// i don't think this is right either anymore - we're using duration (ns) now, no milliseconds
-		expectedNewDuration := int64(float64(duration.Milliseconds()) / speed)
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
-			if podcastProcessor.CanReuseEpisode(oldEp, duration.Milliseconds(), expectedNewDuration) {
+			if podcastProcessor.CanReuseEpisode(entry, oldEp, speed) {
 				slog.Info("Reusing existing processed file", "title", title)
 				reused[title] = oldEp
 				result := podcast.ProcessedEpisode{
 					Title:            title,
-					OriginalDuration: duration.Milliseconds(),
-					NewDuration:      expectedNewDuration,
+					OriginalDuration: entry.Duration,
+					NewDuration:      oldEp.Duration,
 					UUID:             entry.UUID,
 					Speed:            speed,
 					DownloadURL:      oldEp.DownloadURL,
