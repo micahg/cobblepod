@@ -64,7 +64,7 @@ type Enclosure struct {
 // RSSProcessor handles RSS feed generation and processing
 type RSSProcessor struct {
 	channelTitle string
-	drive        *storage.GDrive
+	drive        storage.Storage
 }
 
 // ProcessedEpisode represents a processed audio episode
@@ -90,7 +90,7 @@ type ExistingEpisode struct {
 }
 
 // NewRSSProcessor creates a new RSS processor
-func NewRSSProcessor(channelTitle string, driveService *storage.GDrive) *RSSProcessor {
+func NewRSSProcessor(channelTitle string, driveService storage.Storage) *RSSProcessor {
 	return &RSSProcessor{channelTitle: channelTitle, drive: driveService}
 }
 
@@ -215,6 +215,9 @@ func (p *RSSProcessor) CanReuseEpisode(newEp sources.AudioEntry, oldEp ExistingE
 	newDuration := time.Duration(float64((newEp.Duration - newEp.Offset).Nanoseconds()) / speed)
 
 	fileId := p.drive.ExtractFileIDFromURL(oldEp.DownloadURL)
+	if fileId == "" {
+		return false
+	}
 	reallyExists, err := p.drive.FileExists(fileId)
 	if err != nil {
 		slog.Error("Error checking if file exists", "error", err)

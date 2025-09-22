@@ -30,11 +30,11 @@ type ListeningProgress struct {
 
 // PodcastAddictBackup handles extraction of listening progress from Podcast Addict backups.
 type PodcastAddictBackup struct {
-	drive *storage.GDrive
+	drive storage.Storage
 }
 
 // NewPodcastAddictBackup constructs a new handler.
-func NewPodcastAddictBackup(drive *storage.GDrive) *PodcastAddictBackup {
+func NewPodcastAddictBackup(drive storage.Storage) *PodcastAddictBackup {
 	return &PodcastAddictBackup{drive: drive}
 }
 

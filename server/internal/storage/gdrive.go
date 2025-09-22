@@ -17,7 +17,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-// GDrive wraps the Google Drive API service
+// GDrive wraps the Google Drive API service and implements the Storage interface
 type GDrive struct {
 	drive *drive.Service
 }

@@ -55,7 +55,7 @@ type GDriveDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	storage *storage.GDrive
+	storage storage.Storage
 	state   *state.CobblepodStateManager
 }
 
@@ -80,7 +80,7 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	storage *storage.GDrive,
+	storage storage.Storage,
 	state *state.CobblepodStateManager,
 ) *Processor {
 	return &Processor{
@@ -274,7 +274,7 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 }
 
 // uploadResults handles uploading processed audio files to Google Drive
-func uploadResults(ctx context.Context, gdriveService *storage.GDrive, results []podcast.ProcessedEpisode) error {
+func uploadResults(ctx context.Context, gdriveService storage.Storage, results []podcast.ProcessedEpisode) error {
 	for i, result := range results {
 		// Check if context was cancelled
 		select {
@@ -315,7 +315,7 @@ func uploadResults(ctx context.Context, gdriveService *storage.GDrive, results [
 }
 
 // updateFeed creates and uploads the RSS XML feed and saves the application state
-func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService *storage.GDrive, results []podcast.ProcessedEpisode) error {
+func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService storage.Storage, results []podcast.ProcessedEpisode) error {
 	// Create and upload RSS XML
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
 	rssFileID, err := gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
@@ -349,7 +349,7 @@ func (p *Processor) deleteUnusedEpisodes(gdriveService GDriveDeleter, episodeMap
 }
 
 // processEntries returns the reused episodes
-func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService *storage.GDrive, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
+func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
 	var results []podcast.ProcessedEpisode
 

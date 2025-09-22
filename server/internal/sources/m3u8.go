@@ -16,13 +16,13 @@ import (
 )
 
 type M3U8Source struct {
-	drive          *storage.GDrive
+	drive          storage.Storage
 	mutex          sync.RWMutex
 	processedFiles map[string]bool
 }
 
 // NewProcessor creates a new audio processor
-func NewM3U8Source(driveService *storage.GDrive) *M3U8Source {
+func NewM3U8Source(driveService storage.Storage) *M3U8Source {
 	return &M3U8Source{
 		drive:          driveService,
 		processedFiles: make(map[string]bool),
