@@ -5,6 +5,7 @@ package sources
 
 import (
 	"archive/zip"
+	"cobblepod/internal/storage"
 	"context"
 	"database/sql"
 	"errors"
@@ -14,8 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
-
-	"cobblepod/internal/gdrive"
+	"time"
 
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -25,16 +25,16 @@ import (
 type ListeningProgress struct {
 	Podcast string
 	Episode string
-	Offset  int64
+	Offset  time.Duration
 }
 
 // PodcastAddictBackup handles extraction of listening progress from Podcast Addict backups.
 type PodcastAddictBackup struct {
-	drive *gdrive.Service
+	drive storage.Storage
 }
 
 // NewPodcastAddictBackup constructs a new handler.
-func NewPodcastAddictBackup(drive *gdrive.Service) *PodcastAddictBackup {
+func NewPodcastAddictBackup(drive storage.Storage) *PodcastAddictBackup {
 	return &PodcastAddictBackup{drive: drive}
 }
 
@@ -133,15 +133,18 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 
 	// Removed e.position_to_resume > 0 to get all episodes in the playlist
 	const q = `
-			SELECT 
-				p.name as podcast,
-				e.download_url as url,
-				e.position_to_resume as offset,
-				e.name as episode
-			FROM episodes e
-			JOIN podcasts p ON p._id = e.podcast_id
-			JOIN ordered_list o ON o.id = e._id
-			WHERE o.type = 1`
+		SELECT 
+			p.name as podcast,
+			e.download_url as url,
+			e.position_to_resume as offset,
+			e.duration_ms as duration,
+			e.name as episode
+		FROM episodes e
+		JOIN podcasts p ON p._id = e.podcast_id
+		JOIN ordered_list o ON o.id = e._id
+		WHERE o.type = 1
+		ORDER BY o.rank ASC
+	`
 
 	rows, err := db.Query(q)
 	if err != nil {
@@ -154,11 +157,14 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 		var ae AudioEntry
 		var podcast string
 		var episode string
-		if err := rows.Scan(&podcast, &ae.URL, &ae.Offset, &episode); err != nil {
+		var offsetMs, durationMs int64
+		if err := rows.Scan(&podcast, &ae.URL, &offsetMs, &durationMs, &episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		ae.Title = fmt.Sprintf("%s - %s", podcast, episode)
 		ae.UUID = uuid.New().String()
+		ae.Offset = time.Duration(offsetMs) * time.Millisecond
+		ae.Duration = time.Duration(durationMs) * time.Millisecond
 		results = append(results, ae)
 	}
 	if err := rows.Err(); err != nil {
@@ -246,9 +252,11 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 	results := make([]ListeningProgress, 0, 64)
 	for rows.Next() {
 		var lp ListeningProgress
-		if err := rows.Scan(&lp.Podcast, &lp.Offset, &lp.Episode); err != nil {
+		var offsetMs int64
+		if err := rows.Scan(&lp.Podcast, &offsetMs, &lp.Episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
+		lp.Offset = time.Duration(offsetMs) * time.Millisecond
 		results = append(results, lp)
 	}
 	if err := rows.Err(); err != nil {

@@ -1,12 +1,11 @@
 package sources
 
 import (
+	"cobblepod/internal/storage"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"cobblepod/internal/gdrive"
 
 	"google.golang.org/api/drive/v3"
 )
@@ -20,15 +19,15 @@ type FileInfo struct {
 
 // AudioEntry represents an audio entry from various sources (M3U8 playlist, backup, etc.)
 type AudioEntry struct {
-	Title    string `json:"title"`
-	Duration int64  `json:"duration"`
-	URL      string `json:"url"`
-	UUID     string `json:"uuid"`
-	Offset   int64  `json:"offset,omitempty"` // Listening offset in seconds
+	Title    string        `json:"title"`
+	Duration time.Duration `json:"duration"` // Unmodified duration of the audio entry
+	URL      string        `json:"url"`
+	UUID     string        `json:"uuid"`
+	Offset   time.Duration `json:"offset,omitempty"` // Listening offset
 }
 
 // GetLatestFile is a common function to get the most recent file matching a query
-func GetLatestFile(ctx context.Context, drive *gdrive.Service, query string, fileTypeName string) (*FileInfo, error) {
+func GetLatestFile(ctx context.Context, drive storage.Storage, query string, fileTypeName string) (*FileInfo, error) {
 	files, err := drive.GetFiles(query, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s files: %w", fileTypeName, err)
