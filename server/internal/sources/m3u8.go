@@ -2,7 +2,7 @@ package sources
 
 import (
 	"cobblepod/internal/config"
-	"cobblepod/internal/gdrive"
+	"cobblepod/internal/storage"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,18 +10,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type M3U8Source struct {
-	drive          *gdrive.Service
+	drive          storage.Storage
 	mutex          sync.RWMutex
 	processedFiles map[string]bool
 }
 
 // NewProcessor creates a new audio processor
-func NewM3U8Source(driveService *gdrive.Service) *M3U8Source {
+func NewM3U8Source(driveService storage.Storage) *M3U8Source {
 	return &M3U8Source{
 		drive:          driveService,
 		processedFiles: make(map[string]bool),
@@ -68,7 +69,7 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 			re := regexp.MustCompile(`^#EXTINF:([0-9.]+),(.+)$`)
 			matches := re.FindStringSubmatch(line)
 			if len(matches) == 3 {
-				duration, err := strconv.ParseInt(matches[1], 10, 64)
+				durationSeconds, err := strconv.ParseFloat(matches[1], 64)
 				if err != nil {
 					continue
 				}
@@ -79,7 +80,7 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 					if url != "" && !strings.HasPrefix(url, "#") {
 						entries = append(entries, AudioEntry{
 							Title:    title,
-							Duration: duration,
+							Duration: time.Duration(durationSeconds * float64(time.Second)),
 							URL:      url,
 							UUID:     uuid.New().String(),
 						})
