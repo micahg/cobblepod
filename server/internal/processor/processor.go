@@ -47,8 +47,8 @@ type ffmpegResult struct {
 	Err    error
 }
 
-// GDriveDeleter interface for dependency injection
-type GDriveDeleter interface {
+// StorageDeleter interface for dependency injection
+type StorageDeleter interface {
 	ExtractFileIDFromURL(url string) string
 	DeleteFile(fileID string) error
 }
@@ -61,9 +61,10 @@ type Processor struct {
 
 // NewProcessor creates a new processor with default dependencies
 func NewProcessor(ctx context.Context) (*Processor, error) {
-	storage, err := storage.NewService(ctx)
+	// Create storage using factory - reads STORAGE_BACKEND from environment
+	storage, err := storage.NewStorage(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error setting up Google Drive: %w", err)
+		return nil, fmt.Errorf("error setting up storage backend: %w", err)
 	}
 
 	state, err := state.NewStateManager(ctx)
@@ -91,7 +92,7 @@ func NewProcessorWithDependencies(
 
 // Run executes the main processing logic
 func (p *Processor) Run(ctx context.Context) error {
-	// Use the stored Google Drive servic
+	// Use the configured storage backend (from STORAGE_BACKEND environment variable)
 
 	m3u8src := sources.NewM3U8Source(p.storage)
 	podcastAddictBackup := sources.NewPodcastAddictBackup(p.storage)
@@ -198,7 +199,7 @@ func (p *Processor) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Delete unused episodes from Google Drive
+	// Delete unused episodes from storage backend
 	p.deleteUnusedEpisodes(p.storage, episodeMapping, reused)
 
 	return nil
@@ -273,8 +274,8 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan f
 	}
 }
 
-// uploadResults handles uploading processed audio files to Google Drive
-func uploadResults(ctx context.Context, gdriveService storage.Storage, results []podcast.ProcessedEpisode) error {
+// uploadResults handles uploading processed audio files to storage backend
+func uploadResults(ctx context.Context, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
 	for i, result := range results {
 		// Check if context was cancelled
 		select {
@@ -287,20 +288,20 @@ func uploadResults(ctx context.Context, gdriveService storage.Storage, results [
 		// Skip upload for reused files that already have download_url
 		if downloadURL := result.DownloadURL; downloadURL != "" {
 			slog.Info("Skipping upload for reused file", "title", result.Title)
-			// Extract drive_file_id from download_url for consistency
-			if driveFileID := gdriveService.ExtractFileIDFromURL(downloadURL); driveFileID != "" {
-				results[i].DriveFileID = driveFileID
+			// Extract file_id from download_url for consistency
+			if fileID := storageService.ExtractFileIDFromURL(downloadURL); fileID != "" {
+				results[i].DriveFileID = fileID
 			}
 			continue
 		}
 
-		slog.Info("Uploading to Google Drive", "title", result.Title)
+		slog.Info("Uploading to storage backend", "title", result.Title)
 		tempFile := result.TempFile
 		filename := fmt.Sprintf("%s.mp3", result.Title)
 
-		driveFileID, err := gdriveService.UploadFile(tempFile, filename, "audio/mpeg")
+		fileID, err := storageService.UploadFile(tempFile, filename, "audio/mpeg")
 		if err != nil {
-			return fmt.Errorf("failed to upload %s to Google Drive: %w", result.Title, err)
+			return fmt.Errorf("failed to upload %s to storage backend: %w", result.Title, err)
 		}
 
 		// Clean up temp file
@@ -308,48 +309,48 @@ func uploadResults(ctx context.Context, gdriveService storage.Storage, results [
 			slog.Warn("Failed to remove temp file", "path", tempFile, "error", err)
 		}
 
-		results[i].DriveFileID = driveFileID
+		results[i].DriveFileID = fileID
 	}
 
 	return nil
 }
 
 // updateFeed creates and uploads the RSS XML feed and saves the application state
-func updateFeed(podcastProcessor *podcast.RSSProcessor, gdriveService storage.Storage, results []podcast.ProcessedEpisode) error {
+func updateFeed(podcastProcessor *podcast.RSSProcessor, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
 	// Create and upload RSS XML
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
-	rssFileID, err := gdriveService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
+	rssFileID, err := storageService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
 	if err != nil {
 		return fmt.Errorf("failed to upload RSS feed: %w", err)
 	}
 
-	rssDownloadURL := gdriveService.GenerateDownloadURL(rssFileID)
+	rssDownloadURL := storageService.GenerateDownloadURL(rssFileID)
 	slog.Info("RSS Feed created", "download_url", rssDownloadURL)
 
 	return nil
 }
 
-// deleteUnusedEpisodes removes episodes from Google Drive that are no longer in the current playlist
-func (p *Processor) deleteUnusedEpisodes(gdriveService GDriveDeleter, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
+// deleteUnusedEpisodes removes episodes from storage backend that are no longer in the current playlist
+func (p *Processor) deleteUnusedEpisodes(storageService StorageDeleter, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
 	// Delete episodes that are not reused
 	for title, episode := range episodeMapping {
 		if _, ok := reused[title]; ok {
 			continue
 		}
-		driveId := gdriveService.ExtractFileIDFromURL(episode.DownloadURL)
-		if driveId == "" {
-			slog.Warn("Could not extract Drive file ID from URL", "url", episode.DownloadURL)
+		fileId := storageService.ExtractFileIDFromURL(episode.DownloadURL)
+		if fileId == "" {
+			slog.Warn("Could not extract file ID from URL", "url", episode.DownloadURL)
 			continue
 		}
-		slog.Info("Deleting unused episode from Google Drive", "title", title, "drive_id", driveId)
-		if err := gdriveService.DeleteFile(driveId); err != nil {
-			slog.Error("Failed to delete file from Google Drive", "drive_id", driveId, "error", err)
+		slog.Info("Deleting unused episode from storage backend", "title", title, "file_id", fileId)
+		if err := storageService.DeleteFile(fileId); err != nil {
+			slog.Error("Failed to delete file from storage backend", "file_id", fileId, "error", err)
 		}
 	}
 }
 
 // processEntries returns the reused episodes
-func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, gdriveService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
+func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, storageService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
 	var results []podcast.ProcessedEpisode
 
@@ -451,7 +452,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	results = append(results, newResults...)
 	slog.Info("Processing completed", "processed_files", len(results))
 
-	// Upload processed files to Google Drive
+	// Upload processed files to storage backend
 	if err := uploadResults(ctx, p.storage, results); err != nil {
 		return nil, err
 	}

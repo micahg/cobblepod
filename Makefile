@@ -1,16 +1,24 @@
-.PHONY: build run clean test deps fmt vet
+.PHONY: build run clean test deps fmt vet http-server
 
 # Build the application
 build:
 	cd server && go build -o ../cobblepod main.go
 
+# Build the HTTP server
+build-http:
+	cd server && go build -o ../cobblepod-http cmd/http/main.go
+
 # Run the application
 run:
 	cd server && go run main.go
 
+# Run the HTTP server
+run-http:
+	cd server && go run cmd/http/main.go
+
 # Clean build artifacts
 clean:
-	rm -f cobblepod
+	rm -f cobblepod cobblepod-http
 
 # Download dependencies
 deps:
