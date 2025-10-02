@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
 import { AuthGuard, UserProfile, LogoutButton } from './auth'
+
+// Lazy load the UploadBackupComponent
+const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
 
 function App() {
   const [count, setCount] = useState(0)
@@ -32,6 +35,11 @@ function App() {
           Edit <code>src/App.tsx</code> and save to test HMR
         </p>
       </div>
+
+      {/* Upload Backup Component */}
+      <Suspense fallback={<div>Loading upload component...</div>}>
+        <UploadBackupComponent />
+      </Suspense>
       
       <div style={{ marginTop: '20px' }}>
         <LogoutButton />

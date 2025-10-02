@@ -33,12 +33,19 @@ fmt:
 vet:
 	cd server && go vet ./...
 
-# Run tests
-test:
+# Run server tests
+test-server:
 	cd server && go test ./...
 
+# Run UI tests
+test-ui:
+	cd ui && npm run test:run
+
+# Run all tests
+test: test-server test-ui
+
 # Run all checks
-check: fmt vet test
+check: fmt vet test-server
 
 # Install the application
 install:
