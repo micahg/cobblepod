@@ -5,10 +5,18 @@ export interface UploadBackupResponse {
   jobId?: string;
 }
 
+// Use absolute URL in test environment
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location.origin) {
+    return `${window.location.origin}/api`;
+  }
+  return '/api';
+};
+
 export const backupApi = createApi({
   reducerPath: 'backupApi',
   baseQuery: fetchBaseQuery({
-    baseUrl: '/api',
+    baseUrl: getBaseUrl(),
     prepareHeaders: async (headers) => {
       // Get token from Auth0 if needed
       // const token = await getAccessToken();

@@ -1,31 +1,30 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
+import { http, HttpResponse } from 'msw'
+import { setupServer } from 'msw/node'
 import UploadBackupComponent from './UploadBackupComponent'
 import { backupApi } from '../../services/backupApi'
 
-// Mock global fetch for RTK Query
-global.fetch = vi.fn((url, options) => {
-  return Promise.resolve({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    headers: new Headers({ 'content-type': 'application/json' }),
-    redirected: false,
-    type: 'basic',
-    url: url as string,
-    clone: function() { return this; },
-    body: null,
-    bodyUsed: false,
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    blob: () => Promise.resolve(new Blob()),
-    formData: () => Promise.resolve(new FormData()),
-    json: () => Promise.resolve({ message: 'Upload successful', jobId: 'test-job-123' }),
-    text: () => Promise.resolve('{"message":"Upload successful","jobId":"test-job-123"}'),
-  } as Response);
-}) as any;
+// Setup MSW server
+const server = setupServer(
+  http.post('/api/backup/upload', async () => {
+    // Simulate a small delay for realistic testing
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return HttpResponse.json({ message: 'Upload successful', jobId: 'test-job-123' })
+  })
+)
+
+// Start server before all tests
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+
+// Reset handlers after each test
+afterEach(() => server.resetHandlers())
+
+// Close server after all tests
+afterAll(() => server.close())
 
 // Create a test store
 const createTestStore = () => {
@@ -171,7 +170,9 @@ describe('UploadBackupComponent', () => {
     expect(uploadButton).toBeEnabled()
   })
 
-  it('shows upload button is enabled with valid file', async () => {
+  it('shows upload progress and simulates successful upload', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    
     renderWithRedux(<UploadBackupComponent />)
     
     const file = new File(['backup content'], 'test.backup', { type: 'application/octet-stream' })
@@ -180,10 +181,36 @@ describe('UploadBackupComponent', () => {
     await userEvent.upload(fileInput, file)
     
     const uploadButton = screen.getByText('Upload File')
-    expect(uploadButton).toBeEnabled()
+    await userEvent.click(uploadButton)
+    
+    // Should show loading state
+    expect(screen.getByText('Uploading...')).toBeInTheDocument()
+    expect(uploadButton).toBeDisabled()
+    
+    // Wait for upload to complete
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('File "test.backup" uploaded successfully!')
+    }, { timeout: 3000 })
+    
+    // Success message should be displayed
+    expect(screen.getByText('Upload completed successfully!')).toBeInTheDocument()
+    
+    alertSpy.mockRestore()
   })
 
-  it('disables file input while upload would be in progress', async () => {
+  it('handles upload failure correctly', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    
+    // Override the handler to return an error for this test
+    server.use(
+      http.post('/api/backup/upload', async () => {
+        return HttpResponse.json(
+          { message: 'Upload failed' },
+          { status: 500 }
+        )
+      })
+    )
+    
     renderWithRedux(<UploadBackupComponent />)
     
     const file = new File(['backup content'], 'test.backup', { type: 'application/octet-stream' })
@@ -191,8 +218,20 @@ describe('UploadBackupComponent', () => {
     
     await userEvent.upload(fileInput, file)
     
-    // File input should not be disabled when not uploading
-    expect(fileInput).not.toBeDisabled()
+    const uploadButton = screen.getByText('Upload File')
+    await userEvent.click(uploadButton)
+    
+    // Should show loading state initially
+    expect(screen.getByText('Uploading...')).toBeInTheDocument()
+    
+    // Wait for error to be displayed
+    await waitFor(() => {
+      expect(screen.getByText(/Upload failed:/)).toBeInTheDocument()
+    }, { timeout: 3000 })
+    
+    expect(alertSpy).toHaveBeenCalledWith('Upload failed. Please try again.')
+    
+    alertSpy.mockRestore()
   })
 
   it('prevents upload when no file is selected', () => {
