@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
 import styles from './UploadBackupComponent.module.css';
+import { useUploadBackupMutation } from '../../services/backupApi';
 
 const UploadBackupComponent = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadBackup, { isLoading, isSuccess, isError, error }] = useUploadBackupMutation();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -24,16 +25,9 @@ const UploadBackupComponent = () => {
       return;
     }
 
-    setIsUploading(true);
-    
     try {
-      // TODO: Connect with API later
-      console.log('Uploading file:', selectedFile.name);
-      console.log('File size:', selectedFile.size, 'bytes');
-      
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      const response = await uploadBackup(selectedFile).unwrap();
+      console.log('Upload successful:', response);
       alert(`File "${selectedFile.name}" uploaded successfully!`);
       
       // Reset form
@@ -41,11 +35,9 @@ const UploadBackupComponent = () => {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
+    } catch (err) {
+      console.error('Upload failed:', err);
       alert('Upload failed. Please try again.');
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -72,7 +64,7 @@ const UploadBackupComponent = () => {
             type="file"
             accept=".backup"
             onChange={handleFileSelect}
-            disabled={isUploading}
+            disabled={isLoading}
             required
             className={styles.fileInput}
           />
@@ -84,18 +76,30 @@ const UploadBackupComponent = () => {
               <p><strong>Type:</strong> {selectedFile.type || 'Unknown'}</p>
             </div>
           )}
+
+          {isSuccess && (
+            <div className={styles.successMessage}>
+              Upload completed successfully!
+            </div>
+          )}
+
+          {isError && (
+            <div className={styles.errorMessage}>
+              Upload failed: {error && 'message' in error ? error.message : 'Unknown error'}
+            </div>
+          )}
         </div>
 
         <div className={styles.buttonSection}>
           <button
             onClick={handleUpload}
-            disabled={!selectedFile || isUploading}
+            disabled={!selectedFile || isLoading}
             className={styles.uploadButton}
           >
-            {isUploading ? 'Uploading...' : 'Upload File'}
+            {isLoading ? 'Uploading...' : 'Upload File'}
           </button>
           
-          {selectedFile && !isUploading && (
+          {selectedFile && !isLoading && (
             <button
               onClick={handleClear}
               className={styles.clearButton}

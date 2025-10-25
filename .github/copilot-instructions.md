@@ -9,5 +9,5 @@
 
 # Testing
 
-- `ui` should run with `npm run test:run` to avoid waiting for file changes
-- `server` should run with `make test` to run all tests
+- `ui` should run with `npm run test:run` (or `make test-ui` from the top level)to avoid waiting for file changes
+- `server` should run with `go test ./...` (or `make test-server` from the top level) to run all tests
