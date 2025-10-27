@@ -4,12 +4,21 @@ export const useAuthToken = () => {
   const { getAccessTokenSilently, isAuthenticated } = useAuth0();
 
   const getToken = async (): Promise<string | null> => {
+    console.log('getToken called, isAuthenticated:', isAuthenticated);
+    
     if (!isAuthenticated) {
+      console.warn('User is not authenticated');
       return null;
     }
 
     try {
-      const token = await getAccessTokenSilently();
+      // Request token with specific audience (no offline_access needed)
+      const token = await getAccessTokenSilently({
+        authorizationParams: {
+          audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+        },
+      });
+      console.log('Token retrieved successfully');
       return token;
     } catch (error) {
       console.error('Error getting access token:', error);

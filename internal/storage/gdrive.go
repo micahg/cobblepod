@@ -12,6 +12,7 @@ import (
 
 	"cobblepod/internal/config"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
@@ -20,9 +21,12 @@ import (
 // GDrive wraps the Google Drive API service and implements the Storage interface
 type GDrive struct {
 	drive *drive.Service
+	// For multi-user scenarios, store context needed to create per-user clients
+	ctx context.Context
 }
 
-// NewServiceWithDefaultCredentials creates a new Google Drive service
+// NewServiceWithDefaultCredentials creates a new Google Drive service using default credentials
+// This is used by the worker which runs with service account credentials
 func NewServiceWithDefaultCredentials(ctx context.Context) (*GDrive, error) {
 	credentials, err := google.FindDefaultCredentials(ctx, config.Scopes...)
 	if err != nil {
@@ -39,11 +43,37 @@ func NewServiceWithDefaultCredentials(ctx context.Context) (*GDrive, error) {
 	}
 
 	slog.Info("Google Drive service initialized", "project_id", config.ProjectID)
-	return &GDrive{drive: service}, nil
+	return &GDrive{drive: service, ctx: ctx}, nil
+}
+
+// NewServiceWithToken creates a new Google Drive service using an OAuth2 token
+// This creates a per-request client for a specific user
+func NewServiceWithToken(ctx context.Context, accessToken string) (*GDrive, error) {
+	if accessToken == "" {
+		return nil, fmt.Errorf("access token is required")
+	}
+
+	// Create an OAuth2 token
+	token := &oauth2.Token{
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+	}
+
+	// Create OAuth2 token source
+	tokenSource := oauth2.StaticTokenSource(token)
+
+	// Create Drive service with the token
+	service, err := drive.NewService(ctx, option.WithTokenSource(tokenSource))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Drive service with token: %w", err)
+	}
+
+	slog.Info("Google Drive service initialized with OAuth token")
+	return &GDrive{drive: service, ctx: ctx}, nil
 }
 
 func NewServiceWithClient(client *drive.Service) *GDrive {
-	return &GDrive{drive: client}
+	return &GDrive{drive: client, ctx: context.Background()}
 }
 
 // GenerateDownloadURL converts a Google Drive file ID to a direct download URL

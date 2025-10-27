@@ -17,7 +17,7 @@ run-worker:
 
 # Run the HTTP server
 run-server:
-	go run cmd/http/main.go
+	env $(cat .env.local | grep -v "^\#") go run cmd/http/main.go
 
 # Clean build artifacts
 clean:

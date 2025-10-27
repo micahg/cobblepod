@@ -23,5 +23,12 @@ func SetupRoutes(r *gin.Engine) {
 			auth.POST("/callback", HandleOAuthCallback)
 			auth.GET("/callback", HandleOAuthCallback) // Auth0 typically uses GET
 		}
+
+		// Backup routes (protected)
+		backup := api.Group("/backup")
+		backup.Use(Auth0Middleware()) // Require authentication
+		{
+			backup.POST("/upload", HandleBackupUpload)
+		}
 	}
 }

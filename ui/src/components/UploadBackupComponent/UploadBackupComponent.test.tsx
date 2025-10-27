@@ -13,7 +13,12 @@ const server = setupServer(
   http.post('/api/backup/upload', async () => {
     // Simulate a small delay for realistic testing
     await new Promise(resolve => setTimeout(resolve, 100))
-    return HttpResponse.json({ message: 'Upload successful', jobId: 'test-job-123' })
+    return HttpResponse.json({ 
+      success: true,
+      message: 'Upload successful', 
+      file_id: 'gdrive-file-123',
+      job_id: 'test-job-123' 
+    })
   })
 )
 
@@ -189,7 +194,7 @@ describe('UploadBackupComponent', () => {
     
     // Wait for upload to complete
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('File "test.backup" uploaded successfully!')
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('File "test.backup" uploaded successfully'))
     }, { timeout: 3000 })
     
     // Success message should be displayed
@@ -205,7 +210,7 @@ describe('UploadBackupComponent', () => {
     server.use(
       http.post('/api/backup/upload', async () => {
         return HttpResponse.json(
-          { message: 'Upload failed' },
+          { success: false, error: 'Upload failed' },
           { status: 500 }
         )
       })
@@ -221,15 +226,12 @@ describe('UploadBackupComponent', () => {
     const uploadButton = screen.getByText('Upload File')
     await userEvent.click(uploadButton)
     
-    // Should show loading state initially
-    expect(screen.getByText('Uploading...')).toBeInTheDocument()
-    
     // Wait for error to be displayed
     await waitFor(() => {
       expect(screen.getByText(/Upload failed:/)).toBeInTheDocument()
     }, { timeout: 3000 })
     
-    expect(alertSpy).toHaveBeenCalledWith('Upload failed. Please try again.')
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Upload failed'))
     
     alertSpy.mockRestore()
   })

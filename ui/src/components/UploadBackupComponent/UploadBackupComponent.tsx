@@ -28,16 +28,29 @@ const UploadBackupComponent = () => {
     try {
       const response = await uploadBackup(selectedFile).unwrap();
       console.log('Upload successful:', response);
-      alert(`File "${selectedFile.name}" uploaded successfully!`);
       
-      // Reset form
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (response.success) {
+        const message = response.job_id 
+          ? `File "${selectedFile.name}" uploaded successfully!\nJob ID: ${response.job_id}`
+          : `File "${selectedFile.name}" uploaded successfully!`;
+        alert(message);
+      } else {
+        alert(`Upload failed: ${response.error || 'Unknown error'}`);
+      }
+      
+      // Reset form on success
+      if (response.success) {
+        setSelectedFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      alert('Upload failed. Please try again.');
+      const errorMessage = err && typeof err === 'object' && 'data' in err 
+        ? (err.data as { error?: string })?.error || 'Unknown error'
+        : 'Network error';
+      alert(`Upload failed: ${errorMessage}`);
     }
   };
 
