@@ -1,3 +1,9 @@
 cobblepod
 ui/node_modules
 __debug_bin*
+
+# Environment files with secrets
+.env.local
+.env*.local
+ui/.env.local
+cobblepod-server

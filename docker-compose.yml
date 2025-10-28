@@ -1,12 +1,48 @@
 version: '3.8'
 
 services:
-  cobblepod:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: mfg81/cobblepod:latest
-    container_name: cobblepod
+    container_name: cobblepod-server
     restart: unless-stopped
+    command: ["./cobblepod-server"]
+    ports:
+      - "8080:8080"
     environment:
-      # Valkey connection (points to the valkey service)
+      # Valkey connection
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      # Auth0 configuration
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
+      # Server settings
+      - PORT=8080
+    volumes:
+      # Mount gcloud config directory for Application Default Credentials
+      - ${HOME}/.config/gcloud:/home/appuser/.config/gcloud:ro
+      # Mount data directory for temporary files
+      - ./data:/app/data
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks:
+      - cobblepod-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mfg81/cobblepod:latest
+    container_name: cobblepod-worker
+    restart: unless-stopped
+    command: ["./cobblepod-worker"]
+    environment:
+      # Valkey connection
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
       # Polling settings
