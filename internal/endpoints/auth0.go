@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
 // Auth0Config holds Auth0 configuration
@@ -35,25 +33,11 @@ var mgmtTokenCache = &managementTokenCache{}
 // GetAuth0Config returns Auth0 configuration from environment
 func GetAuth0Config() *Auth0Config {
 	return &Auth0Config{
-		Domain: os.Getenv("AUTH0_DOMAIN"),
-		// TODO remove this if we're only using it for mgmt tokens
+		Domain:       os.Getenv("AUTH0_DOMAIN"),
 		Audience:     os.Getenv("AUTH0_AUDIENCE"),
 		ClientID:     os.Getenv("AUTH0_CLIENT_ID"),
 		ClientSecret: os.Getenv("AUTH0_CLIENT_SECRET"),
 	}
-}
-
-// ValidateAuth0Token validates an Auth0 JWT token
-func ValidateAuth0Token(tokenString string, config *Auth0Config) (*jwt.Token, error) {
-	// Parse token without verification first to get the subject
-	token, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse token: %w", err)
-	}
-
-	// TODO: Implement proper JWT validation with JWKS
-	// For now, just parse the claims
-	return token, nil
 }
 
 // GetGoogleAccessToken exchanges Auth0 token for Google access token using the user ID from context
