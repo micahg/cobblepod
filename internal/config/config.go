@@ -9,24 +9,13 @@ import (
 
 var (
 	// Google Drive and Cloud settings (legacy)
-	Scopes           = []string{"https://www.googleapis.com/auth/drive"}
+	Scopes = []string{"https://www.googleapis.com/auth/drive"}
+	// TODO DELETE THIS OLD GOOGLE CRAP - we have no pubsub and I think we're no longer using default credentials
 	ProjectID        = os.Getenv("GOOGLE_CLOUD_PROJECT_ID")
 	TopicName        = getEnvWithDefault("PUBSUB_TOPIC_NAME", "m3u8-processor")
 	SubscriptionName = getEnvWithDefault("PUBSUB_SUBSCRIPTION_NAME", "m3u8-processor-sub")
 	WebhookURL       = os.Getenv("WEBHOOK_URL")
 	WebhookSecret    = getEnvWithDefault("WEBHOOK_SECRET", uuid.New().String())
-
-	// Storage backend selection
-	StorageBackend = getEnvWithDefault("STORAGE_BACKEND", "gdrive") // "gdrive" or "s3"
-
-	// S3/R2 Configuration
-	S3Region      = getEnvWithDefault("AWS_REGION", "auto")
-	S3Bucket      = os.Getenv("S3_BUCKET")
-	S3AccessKey   = os.Getenv("AWS_ACCESS_KEY_ID")
-	S3SecretKey   = os.Getenv("AWS_SECRET_ACCESS_KEY")
-	S3EndpointURL = os.Getenv("AWS_ENDPOINT_URL") // For R2: https://account-id.r2.cloudflarestorage.com
-	S3BaseURL     = os.Getenv("S3_BASE_URL")      // For public URLs: https://pub-bucket.r2.dev
-	S3PublicRead  = getEnvWithDefault("S3_PUBLIC_READ", "true") == "true"
 
 	// Audio processing settings
 	DefaultSpeed     = 1.5
