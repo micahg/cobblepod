@@ -1,11 +1,13 @@
 package endpoints
 
 import (
+	"cobblepod/internal/queue"
+
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(r *gin.Engine) {
+func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 	// API group with common middleware
 	api := r.Group("/api")
 	{
@@ -28,7 +30,7 @@ func SetupRoutes(r *gin.Engine) {
 		backup := api.Group("/backup")
 		backup.Use(Auth0Middleware()) // Require authentication
 		{
-			backup.POST("/upload", HandleBackupUpload)
+			backup.POST("/upload", HandleBackupUpload(jobQueue))
 		}
 	}
 }

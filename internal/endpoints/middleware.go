@@ -73,8 +73,8 @@ func Auth0Middleware() gin.HandlerFunc {
 	}
 }
 
-// RequireAuth0 is a helper to get user ID from context (use after Auth0Middleware)
-func RequireAuth0(c *gin.Context) (string, error) {
+// GetUserID is a helper to get user ID from context (use after Auth0Middleware)
+func GetUserID(c *gin.Context) (string, error) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		return "", fmt.Errorf("user not authenticated")

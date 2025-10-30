@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cobblepod/internal/endpoints"
+	"cobblepod/internal/queue"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,13 +17,21 @@ import (
 type Server struct {
 	httpServer *http.Server
 	router     *gin.Engine
+	queue      *queue.Queue
 }
 
 // NewServer creates a new HTTP server instance
-func NewServer(port string) *Server {
+func NewServer(port string) (*Server, error) {
 	// Set Gin mode based on environment
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Initialize queue
+	ctx := context.Background()
+	jobQueue, err := queue.NewQueue(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	router := gin.New()
@@ -34,8 +43,8 @@ func NewServer(port string) *Server {
 	// Add CORS middleware for frontend communication
 	router.Use(corsMiddleware())
 
-	// Setup all routes
-	endpoints.SetupRoutes(router)
+	// Setup all routes with dependencies
+	endpoints.SetupRoutes(router, jobQueue)
 
 	// Create HTTP server
 	httpServer := &http.Server{
@@ -49,7 +58,8 @@ func NewServer(port string) *Server {
 	return &Server{
 		httpServer: httpServer,
 		router:     router,
-	}
+		queue:      jobQueue,
+	}, nil
 }
 
 // Start starts the HTTP server
@@ -61,6 +71,14 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the HTTP server
 func (s *Server) Shutdown(ctx context.Context) error {
 	slog.Info("Shutting down HTTP server")
+
+	// Close queue connection
+	if s.queue != nil {
+		if err := s.queue.Close(); err != nil {
+			slog.Error("Failed to close queue", "error", err)
+		}
+	}
+
 	return s.httpServer.Shutdown(ctx)
 }
 

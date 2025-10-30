@@ -26,7 +26,11 @@ func main() {
 	}
 
 	// Create HTTP server
-	srv := server.NewServer(port)
+	srv, err := server.NewServer(port)
+	if err != nil {
+		slog.Error("Failed to create server", "error", err)
+		os.Exit(1)
+	}
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
