@@ -33,6 +33,7 @@ const LoginButton = () => {
         gap: '8px',
       }}
     >
+      {/* This is the Google "G" logo */}
       <svg width="20" height="20" viewBox="0 0 24 24">
         <path
           fill="currentColor"
