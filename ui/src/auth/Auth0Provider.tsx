@@ -22,9 +22,10 @@ const Auth0ProviderWrapper = ({ children }: Auth0ProviderWrapperProps) => {
       authorizationParams={{
         redirect_uri: window.location.origin,
         audience: audience,
-        scope: 'openid profile email',
+        scope: 'openid profile email offline_access',
         connection: 'google-oauth2', // Force Google authentication
       }}
+      useRefreshTokens={true}
       cacheLocation="localstorage"
     >
       {children}
