@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"cobblepod/internal/auth"
 	"cobblepod/internal/queue"
 	"cobblepod/internal/storage"
 
@@ -46,7 +47,7 @@ func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 		}
 
 		// Exchange Auth0 token for Google access token
-		googleToken, err := GetGoogleAccessToken(c.Request.Context(), userID)
+		googleToken, err := auth.GetGoogleAccessToken(c.Request.Context(), userID)
 		if err != nil {
 			slog.Error("Failed to get Google access token", "error", err, "user_id", userID)
 			c.JSON(http.StatusUnauthorized, BackupUploadResponse{

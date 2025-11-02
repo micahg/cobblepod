@@ -1,3 +1,10 @@
+/**
+ * TODO:
+ * - add mgmt token on run
+ * - remove state from Processor and instead fetch backup from queue
+ * - delete m3u8 handling
+ * - remove storage from Processor and create it per-job after fetching the idp token
+ */
 package processor
 
 import (
@@ -11,6 +18,7 @@ import (
 	"cobblepod/internal/audio"
 	"cobblepod/internal/config"
 	"cobblepod/internal/podcast"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/sources"
 	"cobblepod/internal/state"
 	"cobblepod/internal/storage"
@@ -57,6 +65,7 @@ type StorageDeleter interface {
 type Processor struct {
 	storage storage.Storage
 	state   *state.CobblepodStateManager
+	queue   *queue.Queue
 }
 
 // NewProcessor creates a new processor with default dependencies
@@ -73,9 +82,16 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 		// Continue with nil state manager - we'll handle this in Run()
 	}
 
+	// Create queue connection
+	jobQueue, err := queue.NewQueue(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create queue: %w", err)
+	}
+
 	return &Processor{
 		storage: storage,
 		state:   state,
+		queue:   jobQueue,
 	}, nil
 }
 
@@ -83,10 +99,12 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 func NewProcessorWithDependencies(
 	storage storage.Storage,
 	state *state.CobblepodStateManager,
+	queue *queue.Queue,
 ) *Processor {
 	return &Processor{
 		storage: storage,
 		state:   state,
+		queue:   queue,
 	}
 }
 

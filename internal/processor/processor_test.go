@@ -137,7 +137,7 @@ func TestDeleteUnusedEpisodes(t *testing.T) {
 			}
 
 			// Call the actual function using our mock
-			proc := NewProcessorWithDependencies(nil, nil)
+			proc := NewProcessorWithDependencies(nil, nil, nil)
 			proc.deleteUnusedEpisodes(mockService, tt.episodeMapping, tt.reused)
 
 			// Check results
@@ -173,7 +173,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		mockService := NewMockGDriveService()
 
 		// This should not panic
-		proc := NewProcessorWithDependencies(nil, nil)
+		proc := NewProcessorWithDependencies(nil, nil, nil)
 		proc.deleteUnusedEpisodes(mockService, nil, nil)
 
 		deletedFiles := mockService.GetDeletedFiles()
@@ -190,7 +190,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		}
 		reused := map[string]podcast.ExistingEpisode{}
 
-		proc := NewProcessorWithDependencies(nil, nil)
+		proc := NewProcessorWithDependencies(nil, nil, nil)
 		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()
@@ -210,7 +210,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 			"Episode 1": {DownloadURL: "https://drive.google.com/file/d/file1", OriginalGUID: "guid2"},
 		}
 
-		proc := NewProcessorWithDependencies(nil, nil)
+		proc := NewProcessorWithDependencies(nil, nil, nil)
 		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()

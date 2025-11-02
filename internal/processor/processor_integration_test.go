@@ -59,7 +59,7 @@ func TestBigOne(t *testing.T) {
 		state := &state.CobblepodStateManager{}
 
 		// proc, err := NewProcessor(context.Background())
-		proc := NewProcessorWithDependencies(store, state)
+		proc := NewProcessorWithDependencies(store, state, nil)
 		if err != nil {
 			t.Fatalf("Failed to create processor: %v", err)
 		}
