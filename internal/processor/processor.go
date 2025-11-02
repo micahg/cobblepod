@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cobblepod/internal/audio"
+	"cobblepod/internal/auth"
 	"cobblepod/internal/config"
 	"cobblepod/internal/podcast"
 	"cobblepod/internal/queue"
@@ -63,6 +64,7 @@ type StorageDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
+	// TODO REMOVE THIS
 	storage storage.Storage
 	state   *state.CobblepodStateManager
 	queue   *queue.Queue
@@ -110,13 +112,41 @@ func NewProcessorWithDependencies(
 
 // Run executes the main processing logic
 func (p *Processor) Run(ctx context.Context) error {
-	// Use the configured storage backend (from STORAGE_BACKEND environment variable)
+	// Dequeue a job from the queue
+	job, err := p.queue.Dequeue(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to dequeue job: %w", err)
+	}
 
-	m3u8src := sources.NewM3U8Source(p.storage)
-	podcastAddictBackup := sources.NewPodcastAddictBackup(p.storage)
+	// No job available
+	if job == nil {
+		slog.Debug("No jobs in queue")
+		return nil
+	}
+
+	slog.Info("Processing job", "job_id", job.ID, "file_id", job.FileID, "user_id", job.UserID)
+
+	// Get Google access token for the user
+	googleToken, err := auth.GetGoogleAccessToken(ctx, job.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get Google access token for user %s: %w", job.UserID, err)
+	}
+
+	slog.Info("Successfully obtained Google access token for user", "user_id", job.UserID)
+
+	// Create storage service with user's Google token
+	userStorage, err := storage.NewServiceWithToken(ctx, googleToken)
+	if err != nil {
+		return fmt.Errorf("failed to create storage service with user token: %w", err)
+	}
+
+	// Use the user's storage service for this job
+
+	m3u8src := sources.NewM3U8Source(userStorage)
+	podcastAddictBackup := sources.NewPodcastAddictBackup(userStorage)
 
 	audioProcessor := audio.NewProcessor()
-	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", p.storage)
+	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", userStorage)
 
 	// Use the stored state manager
 	stateManager := p.state
@@ -141,7 +171,7 @@ func (p *Processor) Run(ctx context.Context) error {
 	rssFileID := podcastProcessor.GetRSSFeedID()
 	episodeMapping := make(map[string]podcast.ExistingEpisode)
 	if rssFileID != "" {
-		rssContent, err := p.storage.DownloadFile(rssFileID)
+		rssContent, err := userStorage.DownloadFile(rssFileID)
 		if err != nil {
 			slog.Error("Error downloading RSS feed", "error", err)
 		} else {
@@ -212,13 +242,13 @@ func (p *Processor) Run(ctx context.Context) error {
 		return nil
 	}
 
-	reused, err := p.processEntries(ctx, entries, episodeMapping, p.storage, audioProcessor, podcastProcessor)
+	reused, err := p.processEntries(ctx, entries, episodeMapping, userStorage, audioProcessor, podcastProcessor)
 	if err != nil {
 		return err
 	}
 
 	// Delete unused episodes from storage backend
-	p.deleteUnusedEpisodes(p.storage, episodeMapping, reused)
+	p.deleteUnusedEpisodes(userStorage, episodeMapping, reused)
 
 	return nil
 }
