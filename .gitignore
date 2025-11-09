@@ -7,4 +7,4 @@ __debug_bin*
 .env*.local
 ui/.env.local
 cobblepod-server
-http
+cobblepod-worker
