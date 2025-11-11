@@ -1,10 +1,3 @@
-/**
- * TODO:
- * - add mgmt token on run
- * - remove state from Processor and instead fetch backup from queue
- * - delete m3u8 handling
- * - remove storage from Processor and create it per-job after fetching the idp token
- */
 package processor
 
 import (
@@ -111,8 +104,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 		return fmt.Errorf("failed to create storage service with user token: %w", err)
 	}
 
-	// Use the user's storage service for this job
-
+	// TODO: Stop processing M3U8 files
 	m3u8src := sources.NewM3U8Source(userStorage)
 	podcastAddictBackup := sources.NewPodcastAddictBackup(userStorage)
 
