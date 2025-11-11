@@ -6,43 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"cobblepod/internal/config"
 	"cobblepod/internal/processor"
+	"cobblepod/internal/queue"
 )
-
-// cobbleWorker handles processing job requests
-func cobbleWorker(ctx context.Context, processingJobs <-chan struct{}) {
-	proc, err := processor.NewProcessor(ctx)
-	if err != nil {
-		slog.Error("Failed to create processor", "error", err)
-		return
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("Cobble worker shutting down")
-			return
-		case _, ok := <-processingJobs:
-			if !ok {
-				// Channel closed
-				slog.Info("Processing jobs channel closed, worker exiting")
-				return
-			}
-
-			if err := proc.Run(ctx); err != nil {
-				if err == context.Canceled {
-					slog.Info("Processing cancelled")
-					return
-				} else {
-					slog.Error("Error during processing", "error", err)
-				}
-			}
-		}
-	}
-}
 
 func main() {
 	// Initialize structured logging with JSON handler
@@ -59,19 +26,24 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Create a ticker for the polling interval
-	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
-	defer ticker.Stop()
+	// Initialize job queue
+	jobQueue, err := queue.NewQueue(ctx)
+	if err != nil {
+		slog.Error("Failed to connect to job queue", "error", err)
+		os.Exit(1)
+	}
+	defer jobQueue.Close()
 
-	// Channel for processing jobs - buffered to allow one pending job
-	processingJobs := make(chan struct{})
+	// Initialize processor
+	proc, err := processor.NewProcessor(ctx)
+	if err != nil {
+		slog.Error("Failed to create processor", "error", err)
+		os.Exit(1)
+	}
 
-	// Start the processing worker
-	go cobbleWorker(ctx, processingJobs)
+	slog.Info("Worker started, waiting for jobs...")
 
-	slog.Info("Starting cobblepod worker", "poll_interval_seconds", config.PollInterval)
-	processingJobs <- struct{}{}
-
+	// Main worker loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,12 +53,57 @@ func main() {
 			slog.Info("Received signal, shutting down gracefully", "signal", sig)
 			cancel()
 			return
-		case <-ticker.C:
-			select {
-			case processingJobs <- struct{}{}:
-			default:
-				slog.Warn("Skipping processing - queue is full")
+		default:
+			// Dequeue job (blocks until job available or timeout)
+			job, err := jobQueue.Dequeue(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				slog.Error("Failed to dequeue job", "error", err)
+				continue
 			}
+
+			if job == nil {
+				// Timeout, no job available - loop continues
+				continue
+			}
+
+			// Try to mark user as running
+			started, err := jobQueue.StartJob(ctx, job.UserID)
+			if err != nil {
+				slog.Error("Failed to mark job as started", "error", err, "job_id", job.ID)
+				// Fail the job due to system error (don't hold lock)
+				jobQueue.FailJob(ctx, job, "Failed to acquire user lock")
+				continue
+			}
+
+			if !started {
+				// User already has a running job - fail this one (don't hold lock)
+				slog.Warn("User already has running job, failing new job",
+					"user_id", job.UserID, "job_id", job.ID)
+				jobQueue.FailJob(ctx, job, "User already has a job being processed")
+				continue
+			}
+
+			// Process the job - use a function to ensure defer runs
+			func() {
+				// Always release the user lock when done
+				defer func() {
+					if err := jobQueue.CompleteJob(ctx, job.UserID); err != nil {
+						slog.Error("Failed to release user lock", "error", err, "user_id", job.UserID)
+					}
+				}()
+
+				slog.Info("Processing job", "job_id", job.ID, "user_id", job.UserID, "file_id", job.FileID)
+
+				if err := proc.Run(ctx, job); err != nil {
+					slog.Error("Job processing failed", "error", err, "job_id", job.ID)
+					jobQueue.FailJob(ctx, job, err.Error())
+				} else {
+					slog.Info("Job completed successfully", "job_id", job.ID)
+				}
+			}()
 		}
 	}
 }

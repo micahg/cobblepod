@@ -26,8 +26,8 @@ func TestJobMarshaling(t *testing.T) {
 }
 
 func TestQueueConstants(t *testing.T) {
-	if QueueName == "" {
-		t.Error("QueueName should not be empty")
+	if WaitingQueue == "" {
+		t.Error("WaitingQueue should not be empty")
 	}
 	if BlockTimeout == 0 {
 		t.Error("BlockTimeout should not be zero")

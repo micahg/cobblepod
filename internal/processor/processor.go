@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"cobblepod/internal/audio"
+	"cobblepod/internal/auth"
 	"cobblepod/internal/config"
 	"cobblepod/internal/podcast"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/sources"
 	"cobblepod/internal/state"
 	"cobblepod/internal/storage"
@@ -55,18 +57,11 @@ type StorageDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	storage storage.Storage
-	state   *state.CobblepodStateManager
+	state *state.CobblepodStateManager
 }
 
 // NewProcessor creates a new processor with default dependencies
 func NewProcessor(ctx context.Context) (*Processor, error) {
-	// Create storage using factory - reads STORAGE_BACKEND from environment
-	storage, err := storage.NewStorage(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up storage backend: %w", err)
-	}
-
 	state, err := state.NewStateManager(ctx)
 	if err != nil {
 		slog.Error("Failed to connect to state", "error", err)
@@ -74,31 +69,47 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 	}
 
 	return &Processor{
-		storage: storage,
-		state:   state,
+		state: state,
 	}, nil
 }
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	storage storage.Storage,
 	state *state.CobblepodStateManager,
 ) *Processor {
 	return &Processor{
-		storage: storage,
-		state:   state,
+		state: state,
 	}
 }
 
-// Run executes the main processing logic
-func (p *Processor) Run(ctx context.Context) error {
-	// Use the configured storage backend (from STORAGE_BACKEND environment variable)
+// Run executes the main processing logic for the given job
+func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
+	if job == nil {
+		return fmt.Errorf("job cannot be nil")
+	}
 
-	m3u8src := sources.NewM3U8Source(p.storage)
-	podcastAddictBackup := sources.NewPodcastAddictBackup(p.storage)
+	slog.Info("Processing job", "job_id", job.ID, "file_id", job.FileID, "user_id", job.UserID)
+
+	// Get Google access token for the user
+	googleToken, err := auth.GetGoogleAccessToken(ctx, job.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get Google access token for user %s: %w", job.UserID, err)
+	}
+
+	slog.Info("Successfully obtained Google access token for user", "user_id", job.UserID)
+
+	// Create storage service with user's Google token
+	userStorage, err := storage.NewServiceWithToken(ctx, googleToken)
+	if err != nil {
+		return fmt.Errorf("failed to create storage service with user token: %w", err)
+	}
+
+	// TODO: Stop processing M3U8 files
+	m3u8src := sources.NewM3U8Source(userStorage)
+	podcastAddictBackup := sources.NewPodcastAddictBackup(userStorage)
 
 	audioProcessor := audio.NewProcessor()
-	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", p.storage)
+	podcastProcessor := podcast.NewRSSProcessor("Playrun Addict Custom Feed", userStorage)
 
 	// Use the stored state manager
 	stateManager := p.state
@@ -123,7 +134,7 @@ func (p *Processor) Run(ctx context.Context) error {
 	rssFileID := podcastProcessor.GetRSSFeedID()
 	episodeMapping := make(map[string]podcast.ExistingEpisode)
 	if rssFileID != "" {
-		rssContent, err := p.storage.DownloadFile(rssFileID)
+		rssContent, err := userStorage.DownloadFile(rssFileID)
 		if err != nil {
 			slog.Error("Error downloading RSS feed", "error", err)
 		} else {
@@ -194,13 +205,13 @@ func (p *Processor) Run(ctx context.Context) error {
 		return nil
 	}
 
-	reused, err := p.processEntries(ctx, entries, episodeMapping, p.storage, audioProcessor, podcastProcessor)
+	reused, err := p.processEntries(ctx, entries, episodeMapping, userStorage, audioProcessor, podcastProcessor)
 	if err != nil {
 		return err
 	}
 
 	// Delete unused episodes from storage backend
-	p.deleteUnusedEpisodes(p.storage, episodeMapping, reused)
+	p.deleteUnusedEpisodes(userStorage, episodeMapping, reused)
 
 	return nil
 }
@@ -453,12 +464,12 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	slog.Info("Processing completed", "processed_files", len(results))
 
 	// Upload processed files to storage backend
-	if err := uploadResults(ctx, p.storage, results); err != nil {
+	if err := uploadResults(ctx, storageService, results); err != nil {
 		return nil, err
 	}
 
 	// Create and upload RSS XML feed and save state
-	if err := updateFeed(podcastProcessor, p.storage, results); err != nil {
+	if err := updateFeed(podcastProcessor, storageService, results); err != nil {
 		slog.Error("Failed to update feed", "error", err)
 	}
 

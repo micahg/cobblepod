@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"cobblepod/internal/auth"
+
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/gin-gonic/gin"
@@ -15,7 +17,7 @@ import (
 
 // Auth0Middleware validates Auth0 JWT tokens using the official Auth0 middleware
 func Auth0Middleware() gin.HandlerFunc {
-	config := GetAuth0Config()
+	config := auth.GetAuth0Config()
 
 	// Create JWKS provider with caching
 	issuerURL, _ := url.Parse(fmt.Sprintf("https://%s/", config.Domain))
