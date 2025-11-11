@@ -5,40 +5,21 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
-	"cobblepod/internal/queue"
+	queuemock "cobblepod/internal/queue/mock"
 
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func setupTestRedis(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   1, // Use test DB
-	})
-
-	// Test connection
-	ctx := context.Background()
-	_, err := client.Ping(ctx).Result()
-	require.NoError(t, err, "Redis must be available for integration tests")
-
-	// Clean up before test
-	client.FlushDB(ctx)
-
-	t.Cleanup(func() {
-		client.FlushDB(ctx)
-		client.Close()
-	})
-
-	return client
+// QueueInterface defines the methods we need from a queue
+type QueueInterface interface {
+	IsUserRunning(ctx context.Context, userID string) (bool, error)
 }
 
 // mockBackupHandler creates a simplified version of HandleBackupUpload that skips auth/storage
-func mockBackupHandler(jobQueue *queue.Queue) gin.HandlerFunc {
+func mockBackupHandler(jobQueue QueueInterface) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user ID from context (set by test middleware)
 		userID, exists := c.Get("user_id")
@@ -80,23 +61,11 @@ func mockBackupHandler(jobQueue *queue.Queue) gin.HandlerFunc {
 func TestHandleBackupUpload_RejectsWhenUserHasRunningJob(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	// Set up Redis
-	redisClient := setupTestRedis(t)
-	ctx := context.Background()
-
 	testUserID := "test-user-123"
 
-	// Add user to running set to simulate a running job
-	err := redisClient.SAdd(ctx, queue.RunningUsersKey, testUserID).Err()
-	require.NoError(t, err)
-
-	// Verify user is in running set
-	isMember, err := redisClient.SIsMember(ctx, queue.RunningUsersKey, testUserID).Result()
-	require.NoError(t, err)
-	assert.True(t, isMember, "User should be in running set")
-
-	// Create a test queue instance using the same Redis client
-	jobQueue := queue.NewQueueWithClient(redisClient)
+	// Create mock queue and set user as running
+	mockQueue := queuemock.NewMockQueue()
+	mockQueue.SetUserRunning(testUserID, true)
 
 	// Create test router with mock handler
 	router := gin.New()
@@ -107,7 +76,7 @@ func TestHandleBackupUpload_RejectsWhenUserHasRunningJob(t *testing.T) {
 		c.Next()
 	})
 
-	router.POST("/api/backup", mockBackupHandler(jobQueue))
+	router.POST("/api/backup", mockBackupHandler(mockQueue))
 
 	// Create a simple request (no actual file needed for this test)
 	req := httptest.NewRequest(http.MethodPost, "/api/backup", nil)
@@ -117,32 +86,31 @@ func TestHandleBackupUpload_RejectsWhenUserHasRunningJob(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// Assert response
-	assert.Equal(t, http.StatusConflict, w.Code, "Should return 409 Conflict when user has running job")
+	if w.Code != http.StatusConflict {
+		t.Errorf("Expected status %d (Conflict), got %d", http.StatusConflict, w.Code)
+	}
 
 	var response BackupUploadResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-	assert.False(t, response.Success)
-	assert.Contains(t, response.Error, "already have a job", "Error message should indicate concurrent job conflict")
+	if response.Success {
+		t.Error("Expected Success to be false, got true")
+	}
+	if !strings.Contains(response.Error, "already have a job") {
+		t.Errorf("Expected error message to contain 'already have a job', got '%s'", response.Error)
+	}
 }
 
 func TestHandleBackupUpload_AllowsWhenNoRunningJob(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	// Set up Redis
-	redisClient := setupTestRedis(t)
-	ctx := context.Background()
-
 	testUserID := "test-user-456"
 
-	// Verify user is NOT in running set
-	isMember, err := redisClient.SIsMember(ctx, queue.RunningUsersKey, testUserID).Result()
-	require.NoError(t, err)
-	assert.False(t, isMember, "User should NOT be in running set initially")
-
-	// Create a test queue instance using the same Redis client
-	jobQueue := queue.NewQueueWithClient(redisClient)
+	// Create mock queue with no running users
+	mockQueue := queuemock.NewMockQueue()
 
 	// Create test router with mock handler
 	router := gin.New()
@@ -153,7 +121,7 @@ func TestHandleBackupUpload_AllowsWhenNoRunningJob(t *testing.T) {
 		c.Next()
 	})
 
-	router.POST("/api/backup", mockBackupHandler(jobQueue))
+	router.POST("/api/backup", mockBackupHandler(mockQueue))
 
 	// Create a simple request
 	req := httptest.NewRequest(http.MethodPost, "/api/backup", nil)
@@ -163,11 +131,62 @@ func TestHandleBackupUpload_AllowsWhenNoRunningJob(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	// Should succeed (200) since user has no running job
-	assert.Equal(t, http.StatusOK, w.Code, "Should return 200 when user has no running job")
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d (OK), got %d", http.StatusOK, w.Code)
+	}
 
 	var response BackupUploadResponse
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	require.NoError(t, err)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-	assert.True(t, response.Success)
+	if !response.Success {
+		t.Error("Expected Success to be true, got false")
+	}
+}
+
+func TestHandleBackupUpload_HandlesQueueError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	testUserID := "test-user-789"
+
+	// Create mock queue that returns errors
+	mockQueue := queuemock.NewMockQueueWithErrors(queuemock.ErrorOnIsUserRunning)
+
+	// Create test router with mock handler
+	router := gin.New()
+
+	// Mock auth middleware
+	router.Use(func(c *gin.Context) {
+		c.Set("user_id", testUserID)
+		c.Next()
+	})
+
+	router.POST("/api/backup", mockBackupHandler(mockQueue))
+
+	// Create a simple request
+	req := httptest.NewRequest(http.MethodPost, "/api/backup", nil)
+
+	// Record response
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should return 500 when queue check fails
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status %d (Internal Server Error), got %d", http.StatusInternalServerError, w.Code)
+	}
+
+	var response BackupUploadResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if response.Success {
+		t.Error("Expected Success to be false, got true")
+	}
+	if !strings.Contains(response.Error, "Failed to check job status") {
+		t.Errorf("Expected error message to contain 'Failed to check job status', got '%s'", response.Error)
+	}
 }
