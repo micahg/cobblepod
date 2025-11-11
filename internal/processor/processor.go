@@ -67,7 +67,6 @@ type Processor struct {
 	// TODO REMOVE THIS
 	storage storage.Storage
 	state   *state.CobblepodStateManager
-	queue   *queue.Queue
 }
 
 // NewProcessor creates a new processor with default dependencies
@@ -84,16 +83,9 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 		// Continue with nil state manager - we'll handle this in Run()
 	}
 
-	// Create queue connection
-	jobQueue, err := queue.NewQueue(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create queue: %w", err)
-	}
-
 	return &Processor{
 		storage: storage,
 		state:   state,
-		queue:   jobQueue,
 	}, nil
 }
 
@@ -101,27 +93,17 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 func NewProcessorWithDependencies(
 	storage storage.Storage,
 	state *state.CobblepodStateManager,
-	queue *queue.Queue,
 ) *Processor {
 	return &Processor{
 		storage: storage,
 		state:   state,
-		queue:   queue,
 	}
 }
 
-// Run executes the main processing logic
-func (p *Processor) Run(ctx context.Context) error {
-	// Dequeue a job from the queue
-	job, err := p.queue.Dequeue(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to dequeue job: %w", err)
-	}
-
-	// No job available
+// Run executes the main processing logic for the given job
+func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	if job == nil {
-		slog.Debug("No jobs in queue")
-		return nil
+		return fmt.Errorf("job cannot be nil")
 	}
 
 	slog.Info("Processing job", "job_id", job.ID, "file_id", job.FileID, "user_id", job.UserID)

@@ -46,6 +46,26 @@ func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 			return
 		}
 
+		// Check if user already has a running job (fail fast before expensive operations)
+		isRunning, err := jobQueue.IsUserRunning(c.Request.Context(), userID)
+		if err != nil {
+			slog.Error("Failed to check if user has running job", "error", err, "user_id", userID)
+			c.JSON(http.StatusInternalServerError, BackupUploadResponse{
+				Success: false,
+				Error:   "Failed to check job status",
+			})
+			return
+		}
+
+		if isRunning {
+			slog.Warn("User already has a running job", "user_id", userID)
+			c.JSON(http.StatusConflict, BackupUploadResponse{
+				Success: false,
+				Error:   "You already have a job being processed. Please wait for it to complete.",
+			})
+			return
+		}
+
 		// Exchange Auth0 token for Google access token
 		googleToken, err := auth.GetGoogleAccessToken(c.Request.Context(), userID)
 		if err != nil {
