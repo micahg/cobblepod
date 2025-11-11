@@ -6,7 +6,6 @@ package processor
 import (
 	"cobblepod/internal/queue"
 	"cobblepod/internal/state"
-	"cobblepod/internal/storage"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,11 +55,10 @@ func TestBigOne(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create drive service: %v", err)
 		}
-		store := storage.NewServiceWithClient(drive)
 		state := &state.CobblepodStateManager{}
 
 		// Create processor with dependencies
-		proc := NewProcessorWithDependencies(store, state)
+		proc := NewProcessorWithDependencies(state)
 		if err != nil {
 			t.Fatalf("Failed to create processor: %v", err)
 		}

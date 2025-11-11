@@ -10,10 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"cobblepod/internal/config"
-
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 )
@@ -23,27 +20,6 @@ type GDrive struct {
 	drive *drive.Service
 	// For multi-user scenarios, store context needed to create per-user clients
 	ctx context.Context
-}
-
-// NewServiceWithDefaultCredentials creates a new Google Drive service using default credentials
-// This is used by the worker which runs with service account credentials
-func NewServiceWithDefaultCredentials(ctx context.Context) (*GDrive, error) {
-	credentials, err := google.FindDefaultCredentials(ctx, config.Scopes...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find default credentials: %w", err)
-	}
-
-	if config.ProjectID == "" {
-		config.ProjectID = credentials.ProjectID
-	}
-
-	service, err := drive.NewService(ctx, option.WithCredentials(credentials))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Drive service: %w", err)
-	}
-
-	slog.Info("Google Drive service initialized", "project_id", config.ProjectID)
-	return &GDrive{drive: service, ctx: ctx}, nil
 }
 
 // NewServiceWithToken creates a new Google Drive service using an OAuth2 token

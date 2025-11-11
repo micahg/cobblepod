@@ -64,19 +64,11 @@ type StorageDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	// TODO REMOVE THIS
-	storage storage.Storage
-	state   *state.CobblepodStateManager
+	state *state.CobblepodStateManager
 }
 
 // NewProcessor creates a new processor with default dependencies
 func NewProcessor(ctx context.Context) (*Processor, error) {
-	// Create storage using factory - reads STORAGE_BACKEND from environment
-	storage, err := storage.NewStorage(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error setting up storage backend: %w", err)
-	}
-
 	state, err := state.NewStateManager(ctx)
 	if err != nil {
 		slog.Error("Failed to connect to state", "error", err)
@@ -84,19 +76,16 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 	}
 
 	return &Processor{
-		storage: storage,
-		state:   state,
+		state: state,
 	}, nil
 }
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	storage storage.Storage,
 	state *state.CobblepodStateManager,
 ) *Processor {
 	return &Processor{
-		storage: storage,
-		state:   state,
+		state: state,
 	}
 }
 
@@ -483,12 +472,12 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 	slog.Info("Processing completed", "processed_files", len(results))
 
 	// Upload processed files to storage backend
-	if err := uploadResults(ctx, p.storage, results); err != nil {
+	if err := uploadResults(ctx, storageService, results); err != nil {
 		return nil, err
 	}
 
 	// Create and upload RSS XML feed and save state
-	if err := updateFeed(podcastProcessor, p.storage, results); err != nil {
+	if err := updateFeed(podcastProcessor, storageService, results); err != nil {
 		slog.Error("Failed to update feed", "error", err)
 	}
 
