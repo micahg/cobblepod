@@ -37,8 +37,6 @@ services:
       # Server settings
       - PORT=8080
     volumes:
-      # Mount gcloud config directory for Application Default Credentials
-      - ${HOME}/.config/gcloud:/home/appuser/.config/gcloud:ro
       # Mount data directory for temporary files
       - ./data:/app/data
     depends_on:
@@ -62,8 +60,6 @@ services:
       # Polling settings
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
     volumes:
-      # Mount gcloud config directory for Application Default Credentials
-      - ${HOME}/.config/gcloud:/home/appuser/.config/gcloud:ro
       # Mount data directory for temporary files
       - ./data:/app/data
     depends_on:

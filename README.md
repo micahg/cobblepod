@@ -83,22 +83,13 @@ Note, you need to make `$HOME/.config/gcloud/application_default_credentials.jso
    go mod tidy
    ```
 
-2. Set up Google Cloud authentication:
-   ```bash
-   gcloud auth application-default login
-   ```
-
-3. Set environment variables (optional):
-   ```bash
-   export GOOGLE_CLOUD_PROJECT_ID=your-project-id
-   export DEFAULT_SPEED=1.5
-   export MAX_WORKERS=4
-   ```
-
-4. Valkey
+2. Valkey
    ```bash
    docker run -d --name valkey -p 6379:6379 valkey/valkey:8.1.3
    ```
+
+3. Copy the `.env.example` to `.env.local` (there are two - in the root and in the ui folder) and fill in the values required.
+
 ## Usage
 
 Build and run:
