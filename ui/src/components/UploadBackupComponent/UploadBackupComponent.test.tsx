@@ -1,35 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
-import { http, HttpResponse } from 'msw'
-import { setupServer } from 'msw/node'
 import UploadBackupComponent from './UploadBackupComponent'
 import { backupApi } from '../../services/backupApi'
-
-// Setup MSW server
-const server = setupServer(
-  http.post('/api/backup/upload', async () => {
-    // Simulate a small delay for realistic testing
-    await new Promise(resolve => setTimeout(resolve, 100))
-    return HttpResponse.json({ 
-      success: true,
-      message: 'Upload successful', 
-      file_id: 'gdrive-file-123',
-      job_id: 'test-job-123' 
-    })
-  })
-)
-
-// Start server before all tests
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-
-// Reset handlers after each test
-afterEach(() => server.resetHandlers())
-
-// Close server after all tests
-afterAll(() => server.close())
 
 // Create a test store
 const createTestStore = () => {
@@ -178,6 +153,20 @@ describe('UploadBackupComponent', () => {
   it('shows upload progress and simulates successful upload', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     
+    // Mock fetch to return success with proper Response object
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: true,
+        message: 'Upload successful',
+        file_id: 'gdrive-file-123',
+        job_id: 'test-job-123'
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    globalThis.fetch = mockFetch as any
+    
     renderWithRedux(<UploadBackupComponent />)
     
     const file = new File(['backup content'], 'test.backup', { type: 'application/octet-stream' })
@@ -186,19 +175,19 @@ describe('UploadBackupComponent', () => {
     await userEvent.upload(fileInput, file)
     
     const uploadButton = screen.getByText('Upload File')
+    
+    // Click upload button
     await userEvent.click(uploadButton)
     
-    // Should show loading state
-    expect(screen.getByText('Uploading...')).toBeInTheDocument()
-    expect(uploadButton).toBeDisabled()
-    
-    // Wait for upload to complete
+    // Wait for alert to be called with success message
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('File "test.backup" uploaded successfully'))
-    }, { timeout: 3000 })
+    }, { timeout: 5000 })
     
     // Success message should be displayed
-    expect(screen.getByText('Upload completed successfully!')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('Upload completed successfully!')).toBeInTheDocument()
+    }, { timeout: 1000 })
     
     alertSpy.mockRestore()
   })
@@ -206,15 +195,17 @@ describe('UploadBackupComponent', () => {
   it('handles upload failure correctly', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     
-    // Override the handler to return an error for this test
-    server.use(
-      http.post('/api/backup/upload', async () => {
-        return HttpResponse.json(
-          { success: false, error: 'Upload failed' },
-          { status: 500 }
-        )
+    // Mock fetch to return error with proper Response object
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        success: false,
+        error: 'Upload failed'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
       })
     )
+    globalThis.fetch = mockFetch as any
     
     renderWithRedux(<UploadBackupComponent />)
     

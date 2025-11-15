@@ -1,5 +1,16 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
+import { fetch, Headers, Request, Response, FormData } from 'undici'
+
+// Polyfill fetch and related APIs for jsdom environment
+// This is required for MSW to work properly with RTK Query
+Object.assign(globalThis, {
+  fetch,
+  Headers,
+  Request,
+  Response,
+  FormData,
+})
 
 // Setup a base URL for tests
 Object.defineProperty(window, 'location', {
