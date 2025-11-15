@@ -19,7 +19,7 @@ RUN go mod download
 COPY . .
 
 # Build both binaries
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o cobblepod-server ./cmd/http
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o cobblepod-server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o cobblepod-worker ./cmd/worker
 
 # Final stage - minimal runtime image
