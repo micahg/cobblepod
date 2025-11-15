@@ -1,11 +1,25 @@
 version: '3.8'
 
 services:
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: mfg81/cobblepod-ui:latest
+    container_name: cobblepod-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+    networks:
+      - cobblepod-network
+
   server:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mfg81/cobblepod:latest
+    image: mfg81/cobblepod-backend:latest
     container_name: cobblepod-server
     restart: unless-stopped
     command: ["./cobblepod-server"]
@@ -37,7 +51,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mfg81/cobblepod:latest
+    image: mfg81/cobblepod-backend:latest
     container_name: cobblepod-worker
     restart: unless-stopped
     command: ["./cobblepod-worker"]

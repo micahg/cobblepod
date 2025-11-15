@@ -12,7 +12,7 @@ jobs:
       go-version: '1.24'
       working-directory: './server'
 
-  build-and-push:
+  build-and-push-backend:
     needs: test
     permissions:
       contents: read
@@ -22,7 +22,24 @@ jobs:
       context: './server'
       platforms: 'linux/amd64,linux/arm64'
       push: true
-      image-name: mfg81/cobblepod
+      image-name: mfg81/cobblepod-backend
+      registry: docker.io
+      use-metadata: true
+      login-required: true
+    secrets:
+      registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+      registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  build-and-push-ui:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-build-reusable.yml
+    with:
+      context: './ui'
+      platforms: 'linux/amd64,linux/arm64'
+      push: true
+      image-name: mfg81/cobblepod-ui
       registry: docker.io
       use-metadata: true
       login-required: true

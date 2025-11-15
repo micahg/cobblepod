@@ -6,7 +6,7 @@ build-worker:
 
 # Build the HTTP server
 build-server:
-	go build -o cobblepod-server cmd/http/main.go
+	go build -o cobblepod-server cmd/server/main.go
 
 # Build all binaries
 build: build-worker build-server
@@ -17,7 +17,7 @@ run-worker:
 
 # Run the HTTP server
 run-server:
-	env $(cat .env.local | grep -v "^\#") go run cmd/http/main.go
+	env $(cat .env.local | grep -v "^\#") go run cmd/server/main.go
 
 # Clean build artifacts
 clean:
@@ -52,16 +52,16 @@ check: fmt vet test-server
 
 # Install the application
 install:
-	go install ./cmd/http
+	go install ./cmd/server
 
 # Build for multiple platforms
 build-all:
 	GOOS=linux GOARCH=amd64 go build -o cobblepod-worker-linux-amd64 cmd/worker/main.go
 	GOOS=darwin GOARCH=amd64 go build -o cobblepod-worker-darwin-amd64 cmd/worker/main.go
 	GOOS=windows GOARCH=amd64 go build -o cobblepod-worker-windows-amd64.exe cmd/worker/main.go
-	GOOS=linux GOARCH=amd64 go build -o cobblepod-server-linux-amd64 cmd/http/main.go
-	GOOS=darwin GOARCH=amd64 go build -o cobblepod-server-darwin-amd64 cmd/http/main.go
-	GOOS=windows GOARCH=amd64 go build -o cobblepod-server-windows-amd64.exe cmd/http/main.go
+	GOOS=linux GOARCH=amd64 go build -o cobblepod-server-linux-amd64 cmd/server/main.go
+	GOOS=darwin GOARCH=amd64 go build -o cobblepod-server-darwin-amd64 cmd/server/main.go
+	GOOS=windows GOARCH=amd64 go build -o cobblepod-server-windows-amd64.exe cmd/server/main.go
 
 # Default target
 all: clean deps check build
