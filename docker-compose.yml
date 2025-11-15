@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mfg81/cobblepod:latest
+    image: mfg81/cobblepod-backend:latest
     container_name: cobblepod-server
     restart: unless-stopped
     command: ["./cobblepod-server"]
@@ -51,7 +51,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: mfg81/cobblepod:latest
+    image: mfg81/cobblepod-backend:latest
     container_name: cobblepod-worker
     restart: unless-stopped
     command: ["./cobblepod-worker"]
