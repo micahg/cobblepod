@@ -3,32 +3,15 @@ package config
 import (
 	"os"
 	"strconv"
-
-	"github.com/google/uuid"
 )
 
 var (
 	// Google Drive and Cloud settings (legacy)
 	Scopes = []string{"https://www.googleapis.com/auth/drive"}
-	// TODO DELETE THIS OLD GOOGLE CRAP - we have no pubsub and I think we're no longer using default credentials
-	TopicName        = getEnvWithDefault("PUBSUB_TOPIC_NAME", "m3u8-processor")
-	SubscriptionName = getEnvWithDefault("PUBSUB_SUBSCRIPTION_NAME", "m3u8-processor-sub")
-	WebhookURL       = os.Getenv("WEBHOOK_URL")
-	WebhookSecret    = getEnvWithDefault("WEBHOOK_SECRET", uuid.New().String())
 
 	// Audio processing settings
 	DefaultSpeed     = 1.5
 	MaxFFMPEGWorkers = 4
-
-	// Email settings
-	SMTPServer        = getEnvWithDefault("SMTP_SERVER", "smtp.gmail.com")
-	SMTPPort          = getEnvInt("SMTP_PORT", 587)
-	EmailUsername     = os.Getenv("EMAIL_USERNAME")
-	EmailPassword     = os.Getenv("EMAIL_PASSWORD")
-	NotificationEmail = os.Getenv("NOTIFICATION_EMAIL")
-
-	// Polling settings
-	PollInterval = getEnvInt("POLL_INTERVAL", 300)
 
 	// State
 	ValkeyHost = getEnvWithDefault("VALKEY_HOST", "localhost")
