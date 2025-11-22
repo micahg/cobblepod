@@ -1,49 +1,70 @@
-.PHONY: build run clean test deps fmt vet
+.PHONY: build run clean test deps fmt vet server worker
 
-# Build the application
-build:
-	cd server && go build -o ../cobblepod main.go
+# Build the worker (main application)
+build-worker:
+	go build -o cobblepod-worker cmd/worker/main.go
 
-# Run the application
-run:
-	cd server && go run main.go
+# Build the HTTP server
+build-server:
+	go build -o cobblepod-server cmd/server/main.go
+
+# Build all binaries
+build: build-worker build-server
+
+# Run the worker
+run-worker:
+	go run cmd/worker/main.go
+
+# Run the HTTP server
+run-server:
+	env $(cat .env.local | grep -v "^\#") go run cmd/server/main.go
 
 # Clean build artifacts
 clean:
-	rm -f cobblepod
+	rm -f cobblepod-worker cobblepod-server
 
 # Download dependencies
 deps:
-	cd server && go mod tidy
-	cd server && go mod download
+	go mod tidy
+	go mod download
 
 # Format code
 fmt:
-	cd server && go fmt ./...
+	go fmt ./...
 
 # Run go vet
 vet:
-	cd server && go vet ./...
+	go vet ./...
 
-# Run tests
-test:
-	cd server && go test ./...
+# Run server tests
+test-server:
+	go test ./...
+
+# Run UI tests
+test-ui:
+	cd ui && npm run test:run
+
+# Run all tests
+test: test-server test-ui
 
 # Run all checks
-check: fmt vet test
+check: fmt vet test-server
 
 # Install the application
 install:
-	cd server && go install
+	go install ./cmd/server
 
 # Build for multiple platforms
 build-all:
-	cd server && GOOS=linux GOARCH=amd64 go build -o ../cobblepod-linux-amd64 main.go
-	cd server && GOOS=darwin GOARCH=amd64 go build -o ../cobblepod-darwin-amd64 main.go
-	cd server && GOOS=windows GOARCH=amd64 go build -o ../cobblepod-windows-amd64.exe main.go
+	GOOS=linux GOARCH=amd64 go build -o cobblepod-worker-linux-amd64 cmd/worker/main.go
+	GOOS=darwin GOARCH=amd64 go build -o cobblepod-worker-darwin-amd64 cmd/worker/main.go
+	GOOS=windows GOARCH=amd64 go build -o cobblepod-worker-windows-amd64.exe cmd/worker/main.go
+	GOOS=linux GOARCH=amd64 go build -o cobblepod-server-linux-amd64 cmd/server/main.go
+	GOOS=darwin GOARCH=amd64 go build -o cobblepod-server-darwin-amd64 cmd/server/main.go
+	GOOS=windows GOARCH=amd64 go build -o cobblepod-server-windows-amd64.exe cmd/server/main.go
 
 # Default target
 all: clean deps check build
 
 image:
-	docker build -t cobblepod:latest ./server
+	docker build -t cobblepod:latest .

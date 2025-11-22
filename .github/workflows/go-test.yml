@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'server/**'
+      - 'cmd/**'
+      - 'internal/**'
       - '.github/workflows/go-test.yml'
       - '.github/workflows/go-test-reusable.yml'
       - '.github/workflows/docker-build-reusable.yml'
@@ -15,4 +16,4 @@ jobs:
     uses: ./.github/workflows/go-test-reusable.yml
     with:
       go-version: '1.24'
-      working-directory: './server'
+      working-directory: '.'

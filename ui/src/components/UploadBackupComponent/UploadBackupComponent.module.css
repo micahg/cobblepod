@@ -1,0 +1,135 @@
+.uploadBackupComponent {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: 2rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.uploadBackupComponent h2 {
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.uploadBackupComponent p {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.uploadSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fileInputSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fileInputLabel {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.fileInput {
+  padding: 0.5rem;
+  border: 2px dashed #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+
+.fileInput:hover:not(:disabled) {
+  border-color: #007bff;
+}
+
+.fileInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fileInfo {
+  padding: 1rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.fileInfo p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.successMessage {
+  padding: 1rem;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 4px;
+  color: #155724;
+  margin-top: 1rem;
+}
+
+.errorMessage {
+  padding: 1rem;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  color: #721c24;
+  margin-top: 1rem;
+}
+
+.buttonSection {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-start;
+}
+
+.uploadButton {
+  padding: 0.75rem 1.5rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.uploadButton:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.uploadButton:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.clearButton {
+  padding: 0.75rem 1.5rem;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.clearButton:hover {
+  background: #545b62;
+}
+
+@media (max-width: 768px) {
+  .uploadBackupComponent {
+    margin: 1rem;
+    padding: 1rem;
+  }
+
+  .buttonSection {
+    flex-direction: column;
+  }
+}

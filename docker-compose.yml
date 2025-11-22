@@ -1,19 +1,79 @@
 version: '3.8'
 
 services:
-  cobblepod:
-    image: mfg81/cobblepod:latest
-    container_name: cobblepod
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: mfg81/cobblepod-ui:latest
+    container_name: cobblepod-ui
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
-      # Valkey connection (points to the valkey service)
+      # Auth0 configuration
+      - VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN}
+      - VITE_AUTH0_CLIENT_ID=${VITE_AUTH0_CLIENT_ID}
+      - VITE_AUTH0_AUDIENCE=${VITE_AUTH0_AUDIENCE}
+      # API configuration
+      - VITE_API_URL=${VITE_API_URL:-http://cobblepod-server:8080/api}
+      # Node environment
+      - NODE_ENV=${NODE_ENV:-production}
+    depends_on:
+      - server
+    networks:
+      - cobblepod-network
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mfg81/cobblepod-backend:latest
+    container_name: cobblepod-server
+    restart: unless-stopped
+    command: ["./cobblepod-server"]
+    ports:
+      - "8080:8080"
+    environment:
+      # Valkey connection
       - VALKEY_HOST=valkey
       - VALKEY_PORT=6379
+      # Auth0 configuration
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
+      # Server settings
+      - PORT=8080
+    volumes:
+      # Mount data directory for temporary files
+      - ./data:/app/data
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks:
+      - cobblepod-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mfg81/cobblepod-backend:latest
+    container_name: cobblepod-worker
+    restart: unless-stopped
+    command: ["./cobblepod-worker"]
+    environment:
+      # Valkey connection
+      - VALKEY_HOST=valkey
+      - VALKEY_PORT=6379
+      # Auth0 configuration (needed for processing authenticated requests)
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN}
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE}
+      - AUTH0_CLIENT_ID=${AUTH0_CLIENT_ID}
+      - AUTH0_CLIENT_SECRET=${AUTH0_CLIENT_SECRET}
       # Polling settings
       - POLL_INTERVAL=${POLL_INTERVAL:-300}
     volumes:
-      # Mount gcloud config directory for Application Default Credentials
-      - ${HOME}/.config/gcloud:/home/appuser/.config/gcloud:ro
       # Mount data directory for temporary files
       - ./data:/app/data
     depends_on:
