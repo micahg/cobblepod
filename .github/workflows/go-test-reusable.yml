@@ -12,7 +12,7 @@ on:
         description: 'Working directory for Go commands'
         required: false
         type: string
-        default: './server'
+        default: '.'
     outputs:
       test-result:
         description: 'Result of tests'
