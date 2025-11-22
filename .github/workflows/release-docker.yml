@@ -10,7 +10,7 @@ jobs:
     uses: ./.github/workflows/go-test-reusable.yml
     with:
       go-version: '1.24'
-      working-directory: './server'
+      working-directory: '.'
 
   build-and-push-backend:
     needs: test
@@ -19,7 +19,7 @@ jobs:
       packages: write
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
-      context: './server'
+      context: '.'
       platforms: 'linux/amd64,linux/arm64'
       push: true
       image-name: mfg81/cobblepod-backend

@@ -7,7 +7,7 @@ on:
         description: 'Build context directory'
         required: false
         type: string
-        default: './server'
+        default: '.'
       platforms:
         description: 'Target platforms for build'
         required: false
