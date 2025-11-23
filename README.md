@@ -1,11 +1,12 @@
 # Cobblepod
 
-This is a Go rewrite of the original Python M3U8 audio processor. It processes M3U8 playlists from Google Drive, downloads and processes audio files at configurable speeds, and generates podcast RSS feeds.
+This is a Go rewrite of the original Python M3U8 audio processor. Then I bolted on a UI to facilitate uploading backups (so we didn't need full drive access).
+It processes podcast addict backups, downloads and processes audio files at configurable speeds (currently hard-coded configuration to 1.5x), and generates podcast RSS feeds.
 
 ## Features
 
-- Monitors Google Drive for M3U8 playlist files
 - Downloads and processes audio files from M3U8 playlists
+- Downloads and processes audio files from Podcast Addict backups
 - Adjustable audio playback speed using FFmpeg
 - Generates podcast RSS feeds with processed audio
 - Uploads processed files back to Google Drive
@@ -18,33 +19,14 @@ This is a Go rewrite of the original Python M3U8 audio processor. It processes M
 
 ## Running with Docker
 
-First, setup `gcloud` (I'll assume you can manage this package on your own):
-
-```bash
-# Auth
-gcloud auth login
-
-# Set up Application Default Credentials
-gcloud auth application-default login
-
-# Set your project ID
-gcloud config set project YOUR_PROJECT_ID
-
-# Enable required APIs
-gcloud services enable drive.googleapis.com
-
-# Enable scopes
-gcloud auth application-default login --scopes=https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/cloud-platform
-
-# Ensure the container can read (I KNOW, first thing I'll fix a frontend)
-chmod +r .config/gcloud/application_default_credentials.json
-```
-
-Then, pull the compose file:
+Pull the compose file:
 
 ```bash 
 curl "https://raw.githubusercontent.com/micahg/cobblepod/refs/heads/main/docker-compose.yml" -o cobblepod-compose.yml
+chmod 600 cobblepod-compose.yml
 ```
+
+Update with your secrets in `cobblepod-compose.yml` - I'm going to assume your auth0 tenent is setup for google drive access.
 
 Run `crontab -e` to edit your user's crontab, and add the following:
 
