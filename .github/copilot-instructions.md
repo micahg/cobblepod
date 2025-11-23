@@ -5,7 +5,7 @@
 
 # General Guidelines
 
-- Do not create a README.md files subdirectories.
+- Do not create documentation unless you are asked.
 
 # Testing
 

@@ -18,8 +18,14 @@ RUN npm run build
 # Final stage - serve with nginx
 FROM nginx:alpine
 
+# Install gettext for envsubst
+RUN apk add --no-cache gettext
+
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy the template file to nginx html directory
+COPY --from=builder /app/public/auth.template.json /usr/share/nginx/html/auth.template.json
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -38,4 +44,6 @@ USER nginx
 # Expose port
 EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+# Use envsubst to populate auth.json at runtime, then start nginx
+CMD ["/bin/sh", "-c", "envsubst < /usr/share/nginx/html/auth.template.json > /usr/share/nginx/html/auth.json && exec nginx -g 'daemon off;'"]
+

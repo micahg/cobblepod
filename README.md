@@ -19,6 +19,13 @@ It processes podcast addict backups, downloads and processes audio files at conf
 
 ## Running with Docker
 
+### Local Testing
+
+```
+env $(cat .env.local ./ui/.env.local| grep -v "^\#") docker compose up --build
+```
+
+### Setting Up Remotely
 Pull the compose file:
 
 ```bash 

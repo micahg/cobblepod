@@ -1,0 +1,6 @@
+{
+  "domain": "${VITE_AUTH0_DOMAIN}",
+  "clientId": "${VITE_AUTH0_CLIENT_ID}",
+  "audience": "${VITE_AUTH0_AUDIENCE}",
+  "apiUrl": "${VITE_API_URL}"
+}
