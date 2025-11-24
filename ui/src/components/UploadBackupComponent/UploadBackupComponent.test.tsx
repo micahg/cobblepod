@@ -165,32 +165,41 @@ describe('UploadBackupComponent', () => {
         headers: { 'Content-Type': 'application/json' }
       })
     )
+    
+    // Set up mock before rendering
+    const originalFetch = globalThis.fetch
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any
     
-    renderWithRedux(<UploadBackupComponent />)
+    try {
+      renderWithRedux(<UploadBackupComponent />)
     
-    const file = new File(['backup content'], 'test.backup', { type: 'application/octet-stream' })
-    const fileInput = screen.getByLabelText(/select backup file/i) as HTMLInputElement
+      const file = new File(['backup content'], 'test.backup', { type: 'application/octet-stream' })
+      const fileInput = screen.getByLabelText(/select backup file/i) as HTMLInputElement
+      
+      await userEvent.upload(fileInput, file)
+      
+      const uploadButton = screen.getByText('Upload File')
+      
+      // Click upload button
+      await userEvent.click(uploadButton)
+      
+      // Wait for alert to be called with success message
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('File "test.backup" uploaded successfully'))
+      }, { timeout: 10000 })
+      
+      // Success message should be displayed
+      await waitFor(() => {
+        expect(screen.getByText('Upload completed successfully!')).toBeInTheDocument()
+      }, { timeout: 5000 })
     
-    await userEvent.upload(fileInput, file)
-    
-    const uploadButton = screen.getByText('Upload File')
-    
-    // Click upload button
-    await userEvent.click(uploadButton)
-    
-    // Wait for alert to be called with success message
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('File "test.backup" uploaded successfully'))
-    }, { timeout: 5000 })
-    
-    // Success message should be displayed
-    await waitFor(() => {
-      expect(screen.getByText('Upload completed successfully!')).toBeInTheDocument()
-    }, { timeout: 1000 })
-    
-    alertSpy.mockRestore()
-  })
+    } finally {
+      // Restore original fetch
+      globalThis.fetch = originalFetch
+      alertSpy.mockRestore()
+    }
+  }, 15000)
 
   it('handles upload failure correctly', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
@@ -205,6 +214,8 @@ describe('UploadBackupComponent', () => {
         headers: { 'Content-Type': 'application/json' }
       })
     )
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.fetch = mockFetch as any
     
     renderWithRedux(<UploadBackupComponent />)

@@ -1,16 +1,32 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
-import { fetch, Headers, Request, Response, FormData } from 'undici'
+import { fetch, Request, Response, Headers, FormData } from 'undici'
 
-// Polyfill fetch and related APIs for jsdom environment
-// This is required for MSW to work properly with RTK Query
+// Polyfill fetch APIs with undici for proper compatibility
 Object.assign(globalThis, {
   fetch,
-  Headers,
   Request,
-  Response,
+  Response, 
+  Headers,
   FormData,
 })
+
+// Mock runtime config for tests
+vi.mock('../config/runtime', () => ({
+  loadRuntimeConfig: vi.fn().mockResolvedValue({
+    domain: 'test-domain.auth0.com',
+    clientId: 'test-client-id',
+    audience: 'test-audience',
+    apiUrl: 'http://localhost:8080',
+  }),
+  getRuntimeConfig: vi.fn().mockReturnValue({
+    domain: 'test-domain.auth0.com',
+    clientId: 'test-client-id', 
+    audience: 'test-audience',
+    apiUrl: 'http://localhost:8080',
+  }),
+  isConfigLoaded: vi.fn().mockReturnValue(true)
+}))
 
 // Setup a base URL for tests
 Object.defineProperty(window, 'location', {
