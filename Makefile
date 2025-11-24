@@ -19,6 +19,9 @@ run-worker:
 run-server:
 	env $(cat .env.local | grep -v "^\#") go run cmd/server/main.go
 
+run-docker:
+	env $(cat .env.local ./ui/.env.local| grep -v "^\#") docker compose up --build
+
 # Clean build artifacts
 clean:
 	rm -f cobblepod-worker cobblepod-server
