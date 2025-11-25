@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { getRuntimeConfig, isConfigLoaded } from '../config/runtime';
 
 export interface UploadBackupResponse {
   success: boolean;
@@ -8,16 +9,19 @@ export interface UploadBackupResponse {
   error?: string;
 }
 
-// Use absolute URL in test environment
+// Get the API base URL from runtime config
 const getBaseUrl = () => {
-  // In production (Docker/K8s), use environment variable or same origin
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  // Use runtime config if loaded
+  if (isConfigLoaded()) {
+    const config = getRuntimeConfig();
+    if (config.apiUrl) {
+      return config.apiUrl;
+    }
   }
   
-  // In test environment, use absolute URL
-  if (typeof window !== 'undefined' && window.location.origin) {
-    return `${window.location.origin}/api`;
+  // Fallback to environment variable (for development)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
   }
   
   // Default fallback (development with proxy)

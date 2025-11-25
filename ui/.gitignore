@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Runtime config (generated at runtime or for local dev)
+public/auth.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ui:
     build:
@@ -11,14 +9,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Auth0 configuration
+      # Auth0 configuration - injected at runtime via envsubst
       - VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN}
       - VITE_AUTH0_CLIENT_ID=${VITE_AUTH0_CLIENT_ID}
       - VITE_AUTH0_AUDIENCE=${VITE_AUTH0_AUDIENCE}
       # API configuration
       - VITE_API_URL=${VITE_API_URL:-http://cobblepod-server:8080/api}
-      # Node environment
-      - NODE_ENV=${NODE_ENV:-production}
     depends_on:
       - server
     networks:
