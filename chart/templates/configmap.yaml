@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cobblepod-config
+  namespace: {{ .Values.namespace }}
+data:
+  VITE_AUTH0_DOMAIN: {{ .Values.auth0.domain | quote }}
+  VITE_AUTH0_CLIENT_ID: {{ .Values.auth0.frontend.clientId | quote }}
+  VITE_AUTH0_AUDIENCE: {{ .Values.auth0.audience | quote }}
+  VITE_API_URL: "https://{{ .Values.ui.ingress.host }}/api"
+  AUTH0_DOMAIN: {{ .Values.auth0.domain | quote }}
+  AUTH0_AUDIENCE: {{ .Values.auth0.audience | quote }}
+  AUTH0_CLIENT_ID: {{ .Values.auth0.backend.clientId | quote }}
+  VALKEY_HOST: "cobblepod-valkey"
+  VALKEY_PORT: {{ .Values.valkey.port | quote }}
+  POLL_INTERVAL: {{ .Values.worker.pollInterval | quote }}
+  PORT: {{ .Values.server.port | quote }}

@@ -1,0 +1,42 @@
+namespace: cobblepod
+
+ui:
+  image:
+    repository: mfg81/cobblepod-ui
+    tag: latest
+  replicas: 1
+  ingress:
+    host: cobblepod.local
+    tls: true
+    issuer: letsencrypt-staging
+
+server:
+  image:
+    repository: mfg81/cobblepod-backend
+    tag: latest
+  replicas: 1
+  port: 8080
+
+worker:
+  image:
+    repository: mfg81/cobblepod-backend
+    tag: latest
+  replicas: 1
+  pollInterval: 300
+
+valkey:
+  image:
+    repository: valkey/valkey
+    tag: latest
+  port: 6379
+
+auth0:
+  domain: "change-me.us.auth0.com"
+  audience: "change-me"
+  frontend:
+    clientId: "change-me-spa"
+  backend:
+    clientId: "change-me-m2m"
+    # clientSecret is expected to be in a secret named 'cobblepod-secrets' or passed via values
+
+ingressNamespace: ingress-nginx

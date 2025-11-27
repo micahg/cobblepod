@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cobblepod-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cobblepod-server
+spec:
+  replicas: {{ .Values.server.replicas }}
+  selector:
+    matchLabels:
+      app: cobblepod-server
+  template:
+    metadata:
+      labels:
+        app: cobblepod-server
+    spec:
+      containers:
+      - name: server
+        image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
+        command: ["./cobblepod-server"]
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: cobblepod-config
+        env:
+        - name: AUTH0_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cobblepod-secrets
+              key: auth0-client-secret
+        volumeMounts:
+        - mountPath: /app/data
+          name: data-volume
+      volumes:
+      - name: data-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cobblepod-server
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: cobblepod-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: cobblepod-server-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: cobblepod-server
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        "k8s:io.kubernetes.pod.namespace": kube-system
+        "k8s:k8s-app": kube-dns
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: ANY
+      rules:
+        dns:
+        - matchPattern: "*"
+  - toFQDNs:
+    - matchName: {{ .Values.auth0.domain }}
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+  - toEndpoints:
+    - matchLabels:
+        app: cobblepod-valkey
+    toPorts:
+    - ports:
+      - port: "{{ .Values.valkey.port }}"
+        protocol: TCP
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        "k8s:io.kubernetes.pod.namespace": {{ .Values.ingressNamespace }}
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP

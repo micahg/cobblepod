@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cobblepod-valkey
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cobblepod-valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cobblepod-valkey
+  template:
+    metadata:
+      labels:
+        app: cobblepod-valkey
+    spec:
+      containers:
+      - name: valkey
+        image: "{{ .Values.valkey.image.repository }}:{{ .Values.valkey.image.tag }}"
+        command: ["valkey-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - mountPath: /data
+          name: valkey-data
+      volumes:
+      - name: valkey-data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cobblepod-valkey
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: cobblepod-valkey
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: cobblepod-valkey-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: cobblepod-valkey
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: cobblepod-server
+    - matchLabels:
+        app: cobblepod-worker
+    toPorts:
+    - ports:
+      - port: "{{ .Values.valkey.port }}"
+        protocol: TCP
+  egress: []

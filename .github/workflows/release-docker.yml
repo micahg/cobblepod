@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
       context: '.'
-      platforms: 'linux/amd64,linux/arm64'
+      platforms: 'linux/amd64'  # TODO: Add linux/arm64 when needed
       push: true
       image-name: mfg81/cobblepod-backend
       registry: docker.io
@@ -37,7 +37,7 @@ jobs:
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
       context: './ui'
-      platforms: 'linux/amd64,linux/arm64'
+      platforms: 'linux/amd64'  # TODO: Add linux/arm64 when needed
       push: true
       image-name: mfg81/cobblepod-ui
       registry: docker.io

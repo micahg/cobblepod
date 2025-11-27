@@ -1,0 +1,7 @@
+auth0:
+  domain: "cobblepod-dev.ca.auth0.com"
+  audience: "http://localhost:8080/api"
+  frontend:
+    clientId: "c7bdNi9XN7OedT6HNYHIF20bpFNbLuQF"
+  backend:
+    clientId: "2rWB4CHHvd27hHshxCKC8WdzKKU2t5Ae"

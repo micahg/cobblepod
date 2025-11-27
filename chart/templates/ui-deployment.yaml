@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cobblepod-ui
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cobblepod-ui
+spec:
+  replicas: {{ .Values.ui.replicas }}
+  selector:
+    matchLabels:
+      app: cobblepod-ui
+  template:
+    metadata:
+      labels:
+        app: cobblepod-ui
+    spec:
+      containers:
+      - name: ui
+        image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag }}"
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: cobblepod-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cobblepod-ui
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: cobblepod-ui
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: cobblepod-ui-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: cobblepod-ui
+  egressDeny:
+  - fromEntities:
+    - "all"
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        "k8s:io.kubernetes.pod.namespace": {{ .Values.ingressNamespace }}
+    toPorts:
+    - ports:
+      - port: "3000"
+        protocol: TCP
