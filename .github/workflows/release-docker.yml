@@ -12,6 +12,9 @@ jobs:
       go-version: '1.24'
       working-directory: '.'
 
+  test-ui:
+    uses: ./.github/workflows/ui-test.yml
+
   build-and-push-backend:
     needs: test
     permissions:
@@ -31,6 +34,7 @@ jobs:
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-and-push-ui:
+    needs: test-ui
     permissions:
       contents: read
       packages: write
