@@ -1,0 +1,59 @@
+name: Helm Deploy (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      release-name:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      chart-path:
+        required: true
+        type: string
+    secrets:
+      KUBECONFIG:
+        required: true
+      AUTH0_M2M_CLIENT_SECRET:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_CONTENT" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          
+          VALUES_ARGS=""
+          if [ "${{ inputs.environment }}" = "development" ]; then
+            if [ -f "${{ inputs.chart-path }}/values-dev.yaml" ]; then
+              VALUES_ARGS="-f ${{ inputs.chart-path }}/values-dev.yaml"
+            elif [ -f "${{ inputs.chart-path }}/values-dev.yml" ]; then
+              VALUES_ARGS="-f ${{ inputs.chart-path }}/values-dev.yml"
+            fi
+          fi
+
+          helm upgrade --install ${{ inputs.release-name }} ${{ inputs.chart-path }} \
+            --namespace ${{ inputs.namespace }} \
+            --create-namespace \
+            $VALUES_ARGS \
+            --set auth0.backend.clientSecret="${{ secrets.AUTH0_M2M_CLIENT_SECRET }}" \
+            --wait

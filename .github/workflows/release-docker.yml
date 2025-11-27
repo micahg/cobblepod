@@ -50,3 +50,27 @@ jobs:
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  deploy-development:
+    needs: [build-and-push-backend, build-and-push-ui]
+    uses: ./.github/workflows/helm-deploy-reusable.yml
+    with:
+      environment: development
+      release-name: cobblepod
+      namespace: cobblepod
+      chart-path: ./chart
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      AUTH0_M2M_CLIENT_SECRET: ${{ secrets.AUTH0_M2M_CLIENT_SECRET }}
+
+  deploy-production:
+    needs: deploy-development
+    uses: ./.github/workflows/helm-deploy-reusable.yml
+    with:
+      environment: production
+      release-name: cobblepod
+      namespace: cobblepod
+      chart-path: ./chart
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      AUTH0_M2M_CLIENT_SECRET: ${{ secrets.AUTH0_M2M_CLIENT_SECRET }}
