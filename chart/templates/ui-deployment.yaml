@@ -46,9 +46,24 @@ spec:
   endpointSelector:
     matchLabels:
       app: cobblepod-ui
-  egressDeny:
-  - fromEntities:
-    - "all"
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s-app: kube-dns
+        "k8s:io.kubernetes.pod.namespace": kube-system
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP
+  - toEndpoints:
+    - matchLabels:
+        app: cobblepod-server
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
   ingress:
   - fromEndpoints:
     - matchLabels:

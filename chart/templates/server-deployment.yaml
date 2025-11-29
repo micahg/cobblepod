@@ -50,6 +50,19 @@ spec:
       port: 80
       targetPort: 8080
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: cobblepod-server
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
 apiVersion: "cilium.io/v2"
 kind: CiliumNetworkPolicy
 metadata:
@@ -62,15 +75,14 @@ spec:
   egress:
   - toEndpoints:
     - matchLabels:
+        k8s-app: kube-dns
         "k8s:io.kubernetes.pod.namespace": kube-system
-        "k8s:k8s-app": kube-dns
     toPorts:
     - ports:
       - port: "53"
-        protocol: ANY
-      rules:
-        dns:
-        - matchPattern: "*"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
     toPorts:

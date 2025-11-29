@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Runtime config (generated at runtime)
+public/auth.json
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+src/test/
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+
+# IDE
+.vscode
+.idea
+
+# Misc
+.DS_Store
+*.log
