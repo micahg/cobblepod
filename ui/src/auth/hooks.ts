@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
+import { getRuntimeConfig } from '../config/runtime';
 
 export const useAuthToken = () => {
   const { getAccessTokenSilently, isAuthenticated } = useAuth0();
@@ -12,10 +13,11 @@ export const useAuthToken = () => {
     }
 
     try {
+      const config = getRuntimeConfig();
       // Request token with specific audience (no offline_access needed)
       const token = await getAccessTokenSilently({
         authorizationParams: {
-          audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+          audience: config.audience,
         },
       });
       console.log('Token retrieved successfully');
