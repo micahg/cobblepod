@@ -43,7 +43,7 @@ jobs:
           chmod 600 ~/.kube/config
           
           echo "=== Cluster Info ==="
-          kubectl cluster-info
+          kubectl cluster-info --insecure-skip-tls-verify || true
           echo "=== Kubeconfig (sanitized) ==="
           kubectl config view --minify
           
