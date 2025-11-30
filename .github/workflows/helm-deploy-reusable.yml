@@ -42,10 +42,20 @@ jobs:
           echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
           
-          echo "=== Cluster Info ==="
-          kubectl cluster-info --insecure-skip-tls-verify || true
           echo "=== Kubeconfig (sanitized) ==="
           kubectl config view --minify
+          
+          echo "=== Verifying CA certificate ==="
+          CA_DATA=$(kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+          if [ -n "$CA_DATA" ]; then
+            echo "CA cert present, length: ${#CA_DATA}"
+            echo "$CA_DATA" | base64 -d | openssl x509 -noout -subject -issuer -dates 2>&1 || echo "Failed to decode CA cert"
+          else
+            echo "ERROR: No certificate-authority-data found!"
+          fi
+          
+          echo "=== Testing connection ==="
+          kubectl cluster-info --insecure-skip-tls-verify || true
           
           VALUES_ARGS=""
           if [ "${{ inputs.environment }}" = "development" ]; then
