@@ -67,7 +67,7 @@ Note, you need to make `$HOME/.config/gcloud/application_default_credentials.jso
 
 ## Microk8s
 
-Config generated using `microk8s config  | sed "s/NATTED_IP:16443/PUBLIC_HOSTNAME:47826/g" | base64 -w0`.
+Config generated using `microk8s config  | sed "s/NATTED_IP:16443/PUBLIC_HOSTNAME:8443/g" | base64 -w0`.
 
 ### Manual Testing
 
