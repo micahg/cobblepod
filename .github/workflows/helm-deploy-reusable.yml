@@ -42,6 +42,11 @@ jobs:
           echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
           
+          echo "=== Cluster Info ==="
+          kubectl cluster-info
+          echo "=== Kubeconfig (sanitized) ==="
+          kubectl config view --minify
+          
           VALUES_ARGS=""
           if [ "${{ inputs.environment }}" = "development" ]; then
             if [ -f "${{ inputs.chart-path }}/values-dev.yaml" ]; then
