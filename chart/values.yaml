@@ -1,4 +1,4 @@
-namespace: cobblepod
+namespace: cobblepod-prod
 
 ui:
   image:

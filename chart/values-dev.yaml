@@ -1,3 +1,5 @@
+namespace: cobblepod-dev
+
 ui:
   ingress:
     host: cobblepod.steakholdermeating.com
