@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cobblepod-worker
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: cobblepod-worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app: cobblepod-worker
+  template:
+    metadata:
+      labels:
+        app: cobblepod-worker
+    spec:
+      containers:
+      - name: worker
+        image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+        command: ["./cobblepod-worker"]
+        envFrom:
+        - configMapRef:
+            name: cobblepod-config
+        env:
+        - name: AUTH0_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: cobblepod-secrets
+              key: auth0-client-secret
+        volumeMounts:
+        - mountPath: /app/data
+          name: data-volume
+      volumes:
+      - name: data-volume
+        emptyDir: {}
+---
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: cobblepod-worker-policy
+  namespace: {{ .Values.namespace }}
+spec:
+  endpointSelector:
+    matchLabels:
+      app: cobblepod-worker
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s-app: kube-dns
+        "k8s:io.kubernetes.pod.namespace": kube-system
+    toPorts:
+    - ports:
+      - port: "53"
+        protocol: UDP
+      - port: "53"
+        protocol: TCP
+  - toFQDNs:
+    - matchName: {{ .Values.auth0.domain }}
+    - matchPattern: "*.googleapis.com"
+    - matchPattern: "accounts.google.com"
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+  - toEndpoints:
+    - matchLabels:
+        app: cobblepod-valkey
+    toPorts:
+    - ports:
+      - port: "{{ .Values.valkey.port }}"
+        protocol: TCP
+  ingress: []

@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+LICENSE
+
+# Build artifacts
+cobblepod-server
+cobblepod-worker
+__debug_bin*
+
+# Data directories
+data/
+
+# Test files
+*_test.go
+endpoints.test
+test-*.sh
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# IDE
+.vscode
+.idea
+
+# Node modules (for UI builds from root)
+ui/node_modules
+ui/dist
+ui/.vite
+
+# Misc
+.DS_Store

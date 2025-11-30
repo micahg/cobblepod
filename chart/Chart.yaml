@@ -1,0 +1,6 @@
+apiVersion: v2
+name: cobblepod
+description: A Helm chart for Kubernetes installation of Cobblepod
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

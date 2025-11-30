@@ -65,6 +65,18 @@ docker run -v "$HOME/.config/gcloud:/home/appuser/.config/gcloud" cobblepod
 
 Note, you need to make `$HOME/.config/gcloud/application_default_credentials.json` readable inside the docker container. *THIS IS A SECURITY PROBLEM AND I KNOW IT*. I'm hoping to make a proper auth fix for this in the future (where you'd sign in as a client) -- might not work though because I think google wants a reachable URL. Sadly, device code doesn't work with the google cloud permissions we need 😭
 
+## Microk8s
+
+Config generated using `microk8s config  | sed "s/NATTED_IP:16443/PUBLIC_HOSTNAME:47826/g" | base64 -w0`.
+
+### Manual Testing
+
+```
+helm install cobblepod ./chart \
+  --namespace cobblepod --create-namespace \
+  --set auth0.backend.clientSecret="YOUR_M2M_SECRET"
+```
+
 ## Development
 
 1. Install dependencies:

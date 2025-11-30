@@ -12,6 +12,9 @@ jobs:
       go-version: '1.24'
       working-directory: '.'
 
+  test-ui:
+    uses: ./.github/workflows/ui-test.yml
+
   build-and-push-backend:
     needs: test
     permissions:
@@ -20,7 +23,7 @@ jobs:
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
       context: '.'
-      platforms: 'linux/amd64,linux/arm64'
+      platforms: 'linux/amd64'  # TODO: Add linux/arm64 when needed
       push: true
       image-name: mfg81/cobblepod-backend
       registry: docker.io
@@ -31,13 +34,14 @@ jobs:
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-and-push-ui:
+    needs: test-ui
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/docker-build-reusable.yml
     with:
       context: './ui'
-      platforms: 'linux/amd64,linux/arm64'
+      platforms: 'linux/amd64'  # TODO: Add linux/arm64 when needed
       push: true
       image-name: mfg81/cobblepod-ui
       registry: docker.io
@@ -46,3 +50,27 @@ jobs:
     secrets:
       registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  deploy-development:
+    needs: [build-and-push-backend, build-and-push-ui]
+    uses: ./.github/workflows/helm-deploy-reusable.yml
+    with:
+      environment: development
+      release-name: cobblepod
+      namespace: cobblepod
+      chart-path: ./chart
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      AUTH0_M2M_CLIENT_SECRET: ${{ secrets.AUTH0_M2M_CLIENT_SECRET }}
+
+  deploy-production:
+    needs: deploy-development
+    uses: ./.github/workflows/helm-deploy-reusable.yml
+    with:
+      environment: production
+      release-name: cobblepod
+      namespace: cobblepod
+      chart-path: ./chart
+    secrets:
+      KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      AUTH0_M2M_CLIENT_SECRET: ${{ secrets.AUTH0_M2M_CLIENT_SECRET }}
