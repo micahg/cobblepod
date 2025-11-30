@@ -1,3 +1,9 @@
+ui:
+  ingress:
+    host: cobblepod.steakholdermeating.com
+
+ingressNamespace: ingress
+
 auth0:
   domain: "cobblepod-dev.ca.auth0.com"
   audience: "http://localhost:8080/api"
