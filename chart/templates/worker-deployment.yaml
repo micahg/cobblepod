@@ -45,10 +45,10 @@ spec:
     matchLabels:
       app: cobblepod-worker
   egress:
-  - toEndpoints:
-    - matchLabels:
-        k8s-app: kube-dns
-        "k8s:io.kubernetes.pod.namespace": kube-system
+  - toServices:
+    - k8sService:
+        serviceName: kube-dns
+        namespace: kube-system
     toPorts:
     - ports:
       - port: "53"
