@@ -15,6 +15,9 @@ on:
       chart-path:
         required: true
         type: string
+      app-version:
+        required: false
+        type: string
     secrets:
       KUBECONFIG:
         required: true
@@ -55,9 +58,18 @@ jobs:
             fi
           fi
 
+          APP_VERSION_ARG=""
+          if [ -n "${{ inputs.app-version }}" ]; then
+            # Strip 'v' prefix if present to match docker metadata-action semver pattern
+            VERSION="${{ inputs.app-version }}"
+            VERSION="${VERSION#v}"
+            APP_VERSION_ARG="--set server.image.tag=${VERSION} --set ui.image.tag=${VERSION} --set worker.image.tag=${VERSION}"
+          fi
+
           helm upgrade --install ${{ inputs.release-name }} ${{ inputs.chart-path }} \
             --namespace ${{ inputs.namespace }} \
             --create-namespace \
             $VALUES_ARGS \
+            $APP_VERSION_ARG \
             --set auth0.backend.clientSecret="${{ secrets.AUTH0_M2M_CLIENT_SECRET }}" \
             --wait

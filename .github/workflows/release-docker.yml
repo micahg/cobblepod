@@ -66,6 +66,7 @@ jobs:
       release-name: cobblepod
       namespace: ${{ matrix.namespace }}
       chart-path: ./chart
+      app-version: ${{ github.ref_name }}
     secrets:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
       AUTH0_M2M_CLIENT_SECRET: ${{ secrets.AUTH0_M2M_CLIENT_SECRET }}
