@@ -57,7 +57,6 @@ jobs:
 
           helm upgrade --install ${{ inputs.release-name }} ${{ inputs.chart-path }} \
             --namespace ${{ inputs.namespace }} \
-            --create-namespace \
             $VALUES_ARGS \
             --set auth0.backend.clientSecret="${{ secrets.AUTH0_M2M_CLIENT_SECRET }}" \
             --wait
