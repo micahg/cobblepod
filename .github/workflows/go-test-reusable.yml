@@ -32,6 +32,7 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: ${{ inputs.go-version }}
+        cache: true
         cache-dependency-path: ${{ inputs.working-directory }}/go.sum
 
     - name: Download dependencies
@@ -39,6 +40,10 @@ jobs:
       run: |
         go mod download
         go mod verify
+
+    - name: Build packages (warms up cache for vet)
+      working-directory: ${{ inputs.working-directory }}
+      run: go build -v ./...
 
     - name: Run go vet
       working-directory: ${{ inputs.working-directory }}
