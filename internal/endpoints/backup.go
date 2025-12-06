@@ -35,11 +35,6 @@ type BackupUploadResponse struct {
 // HandleBackupUpload processes backup file upload
 func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		slog.Info("Backup upload request received",
-			"method", c.Request.Method,
-			"remote_addr", c.ClientIP(),
-			"content_type", c.Request.Header.Get("Content-Type"))
-
 		// Get user ID from context (set by Auth0Middleware)
 		userID, err := GetUserID(c)
 		if err != nil {
@@ -50,8 +45,6 @@ func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 			})
 			return
 		}
-
-		slog.Info("User authenticated for upload", "user_id", userID)
 
 		// Check if user already has a running job (fail fast before expensive operations)
 		isRunning, err := jobQueue.IsUserRunning(c.Request.Context(), userID)

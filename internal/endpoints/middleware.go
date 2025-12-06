@@ -20,11 +20,6 @@ import (
 func Auth0Middleware() gin.HandlerFunc {
 	config := auth.GetAuth0Config()
 
-	slog.Info("Auth0 middleware initialized",
-		"domain", config.Domain,
-		"audience", config.Audience,
-		"clientId", config.ClientID)
-
 	// Create JWKS provider with caching
 	issuerURL, _ := url.Parse(fmt.Sprintf("https://%s/", config.Domain))
 	provider := jwks.NewCachingProvider(issuerURL, 24*time.Hour)
@@ -42,11 +37,6 @@ func Auth0Middleware() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		slog.Debug("Auth0 middleware processing request",
-			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
-			"remote_addr", c.ClientIP())
-
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			slog.Warn("Missing authorization header",
@@ -57,28 +47,17 @@ func Auth0Middleware() gin.HandlerFunc {
 			return
 		}
 
-		slog.Debug("Authorization header present",
-			"header_length", len(authHeader),
-			"has_bearer_prefix", strings.HasPrefix(authHeader, "Bearer "))
-
 		// Extract token from "Bearer <token>"
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == authHeader {
-			slog.Warn("Invalid authorization header format", "header", authHeader)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
 			c.Abort()
 			return
 		}
 
-		slog.Debug("Token extracted", "token_length", len(tokenString))
-
 		// Validate the token
 		token, err := jwtValidator.ValidateToken(context.Background(), tokenString)
 		if err != nil {
-			slog.Error("Token validation failed",
-				"error", err,
-				"token_length", len(tokenString),
-				"path", c.Request.URL.Path)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("Invalid token: %v", err)})
 			c.Abort()
 			return
@@ -87,16 +66,10 @@ func Auth0Middleware() gin.HandlerFunc {
 		// Extract claims
 		claims, ok := token.(*validator.ValidatedClaims)
 		if !ok {
-			slog.Error("Failed to extract claims from token")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
 			c.Abort()
 			return
 		}
-
-		slog.Info("Token validated successfully",
-			"user_id", claims.RegisteredClaims.Subject,
-			"issuer", claims.RegisteredClaims.Issuer,
-			"audience", claims.RegisteredClaims.Audience)
 
 		// Store user ID and claims in context
 		c.Set("user_id", claims.RegisteredClaims.Subject)
