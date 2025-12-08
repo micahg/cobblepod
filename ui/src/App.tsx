@@ -13,19 +13,24 @@ function AppContent() {
 
   // Set up token getter for RTK Query
   useEffect(() => {
-    console.log('Setting token getter');
-    setTokenGetter(getToken)
-    
-    // Test the token getter immediately
-    getToken().then(token => {
-      if (token) {
-        console.log('Token retrieved successfully, length:', token.length);
-      } else {
-        console.warn('Token is null - check Auth0 configuration');
+    const initializeToken = async () => {
+      console.log('Setting token getter');
+      setTokenGetter(getToken)
+      
+      // Test the token getter immediately
+      try {
+        const token = await getToken();
+        if (token) {
+          console.log('Token retrieved successfully, length:', token.length);
+        } else {
+          console.warn('Token is null - check Auth0 configuration');
+        }
+      } catch (err) {
+        console.error('Error getting token:', err);
       }
-    }).catch(err => {
-      console.error('Error getting token:', err);
-    });
+    };
+    
+    initializeToken();
   }, [getToken])
 
   return (
