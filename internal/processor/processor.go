@@ -57,7 +57,8 @@ type StorageDeleter interface {
 
 // Processor handles the main processing logic
 type Processor struct {
-	state *state.CobblepodStateManager
+	state         *state.CobblepodStateManager
+	tokenProvider auth.TokenProvider
 }
 
 // NewProcessor creates a new processor with default dependencies
@@ -69,16 +70,19 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 	}
 
 	return &Processor{
-		state: state,
+		state:         state,
+		tokenProvider: &auth.DefaultTokenProvider{},
 	}, nil
 }
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
 	state *state.CobblepodStateManager,
+	tokenProvider auth.TokenProvider,
 ) *Processor {
 	return &Processor{
-		state: state,
+		state:         state,
+		tokenProvider: tokenProvider,
 	}
 }
 
@@ -91,7 +95,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	slog.Info("Processing job", "job_id", job.ID, "file_id", job.FileID, "user_id", job.UserID)
 
 	// Get Google access token for the user
-	googleToken, err := auth.GetGoogleAccessToken(ctx, job.UserID)
+	googleToken, err := p.tokenProvider.GetGoogleAccessToken(ctx, job.UserID)
 	if err != nil {
 		return fmt.Errorf("failed to get Google access token for user %s: %w", job.UserID, err)
 	}
@@ -204,6 +208,8 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 		slog.Info("No entries found in M3U8 file")
 		return nil
 	}
+
+	// TODO update job with entries
 
 	reused, err := p.processEntries(ctx, entries, episodeMapping, userStorage, audioProcessor, podcastProcessor)
 	if err != nil {
@@ -392,6 +398,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 					OriginalGUID:     oldEp.OriginalGUID,
 				}
 				results = append(results, result)
+				// todo set job to skipped
 				continue
 			}
 		}
@@ -399,6 +406,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 		// Send request and wait for response
 		slog.Info("Enqueuing download", "title", title, "url", entry.URL)
 		dlRequests <- downloadReq{Idx: i, URL: entry.URL}
+		// todo set job to downloading
 	}
 	// all done sending jobs
 	close(dlRequests)
@@ -441,6 +449,7 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 			Speed:    speed,
 			Offset:   entries[i].Offset,
 		}
+		// todo set job to processing
 	}
 	close(ffmpegJobs)
 	wg.Wait()
