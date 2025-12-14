@@ -58,7 +58,7 @@ test-server-integration:
 	@echo "Waiting for Valkey to be ready..."
 	@sleep 2
 	@echo "Running integration tests..."
-	@VALKEY_PORT=6380 go test -tags integration -coverprofile=coverage.out -v ./...; \
+	@VALKEY_PORT=6380 go test -tags integration -coverprofile=coverage.out -v -race ./...; \
 	EXIT_CODE=$$?; \
 	echo "Cleaning up..."; \
 	docker rm -f cobblepod-test-valkey > /dev/null; \
