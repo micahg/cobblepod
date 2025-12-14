@@ -39,7 +39,7 @@ fmt:
 vet:
 	go vet ./...
 
-# Run server tests
+# Run server tests (unit tests only)
 test-server:
 	go test ./...
 
@@ -48,6 +48,21 @@ test-ui:
 	cd ui && npm run test:run
 
 # Run all tests
+test: test-server test-ui
+
+# Run server integration tests with a dedicated Valkey instance
+# This runs BOTH unit and integration tests, providing combined coverage
+test-server-integration:
+	@echo "Starting test Valkey instance..."
+	@docker run -d -p 6380:6379 --name cobblepod-test-valkey valkey/valkey:latest > /dev/null
+	@echo "Waiting for Valkey to be ready..."
+	@sleep 2
+	@echo "Running integration tests..."
+	@VALKEY_PORT=6380 go test -tags integration -coverprofile=coverage.out -v ./...; \
+	EXIT_CODE=$$?; \
+	echo "Cleaning up..."; \
+	docker rm -f cobblepod-test-valkey > /dev/null; \
+	exit $$EXIT_CODE
 test: test-server test-ui
 
 # Run all checks

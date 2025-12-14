@@ -52,7 +52,7 @@ func TestMockQueue_StartJob(t *testing.T) {
 	mockQueue := NewMockQueue()
 
 	// First call should succeed
-	added, err := mockQueue.StartJob(ctx, "user1")
+	added, err := mockQueue.StartJob(ctx, "user1", "job1")
 	if err != nil {
 		t.Fatalf("StartJob() unexpected error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestMockQueue_StartJob(t *testing.T) {
 	}
 
 	// Second call should fail (user already running)
-	added, err = mockQueue.StartJob(ctx, "user1")
+	added, err = mockQueue.StartJob(ctx, "user1", "job1")
 	if err != nil {
 		t.Fatalf("StartJob() unexpected error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestMockQueue_CompleteJob(t *testing.T) {
 	mockQueue := NewMockQueue()
 
 	// Start a job
-	added, err := mockQueue.StartJob(ctx, "user1")
+	added, err := mockQueue.StartJob(ctx, "user1", "job1")
 	if err != nil {
 		t.Fatalf("StartJob() unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestMockQueue_CompleteJob(t *testing.T) {
 	}
 
 	// Complete the job
-	err = mockQueue.CompleteJob(ctx, "user1")
+	err = mockQueue.CompleteJob(ctx, "user1", "job1")
 	if err != nil {
 		t.Fatalf("CompleteJob() unexpected error: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestMockQueueWithErrors_StartJob(t *testing.T) {
 	ctx := context.Background()
 	mockQueue := NewMockQueueWithErrors(ErrorOnStartJob)
 
-	_, err := mockQueue.StartJob(ctx, "user1")
+	_, err := mockQueue.StartJob(ctx, "user1", "job1")
 	if err == nil {
 		t.Error("Expected error from StartJob, got nil")
 	}
@@ -371,7 +371,7 @@ func TestMockQueueWithErrors_CompleteJob(t *testing.T) {
 	ctx := context.Background()
 	mockQueue := NewMockQueueWithErrors(ErrorOnCompleteJob)
 
-	err := mockQueue.CompleteJob(ctx, "user1")
+	err := mockQueue.CompleteJob(ctx, "user1", "job1")
 	if err == nil {
 		t.Error("Expected error from CompleteJob, got nil")
 	}
