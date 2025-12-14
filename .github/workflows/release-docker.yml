@@ -58,8 +58,8 @@ jobs:
         include:
           - environment: development
             namespace: cobblepod-dev
-          - environment: production
-            namespace: cobblepod-prod
+          # - environment: production
+          #   namespace: cobblepod-prod
     uses: ./.github/workflows/helm-deploy-reusable.yml
     with:
       environment: ${{ matrix.environment }}
