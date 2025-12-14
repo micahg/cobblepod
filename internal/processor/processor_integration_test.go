@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"google.golang.org/api/drive/v3"
-	"google.golang.org/api/option"
 )
 
 // TODO move this to testing
@@ -49,19 +48,19 @@ func TestBigOne(t *testing.T) {
 		}, "fields=files%28id%2C+name%2C+modifiedTime%29")
 		defer mockServer.Close()
 
-		ctx := context.Background()
+		// ctx := context.Background()
 
-		drive, err := drive.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(mockServer.URL))
-		if err != nil {
-			t.Fatalf("Failed to create drive service: %v", err)
-		}
+		// drive, err := drive.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(mockServer.URL))
+		// if err != nil {
+		// 	t.Fatalf("Failed to create drive service: %v", err)
+		// }
 		state := &state.CobblepodStateManager{}
 
 		// Create processor with dependencies
 		proc := NewProcessorWithDependencies(state)
-		if err != nil {
-			t.Fatalf("Failed to create processor: %v", err)
-		}
+		// if err != nil {
+		// 	t.Fatalf("Failed to create processor: %v", err)
+		// }
 
 		// Create a test job
 		testJob := &queue.Job{
@@ -72,7 +71,7 @@ func TestBigOne(t *testing.T) {
 		}
 
 		// Run with the test job
-		err = proc.Run(context.Background(), testJob)
+		err := proc.Run(context.Background(), testJob)
 		if err != nil {
 			t.Logf("Processor run completed with error (expected in test): %v", err)
 		}

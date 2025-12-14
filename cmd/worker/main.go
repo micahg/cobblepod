@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"time"
+
 	"cobblepod/internal/processor"
 	"cobblepod/internal/queue"
 )
@@ -41,6 +43,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Start cleanup ticker (every hour)
+	cleanupTicker := time.NewTicker(1 * time.Hour)
+	defer cleanupTicker.Stop()
+
 	slog.Info("Worker started, waiting for jobs...")
 
 	// Main worker loop
@@ -53,6 +59,11 @@ func main() {
 			slog.Info("Received signal, shutting down gracefully", "signal", sig)
 			cancel()
 			return
+		case <-cleanupTicker.C:
+			slog.Info("Running scheduled cleanup")
+			if err := jobQueue.CleanupExpiredJobs(ctx); err != nil {
+				slog.Error("Failed to cleanup expired jobs", "error", err)
+			}
 		default:
 			// Dequeue job (blocks until job available or timeout)
 			job, err := jobQueue.Dequeue(ctx)
@@ -70,7 +81,7 @@ func main() {
 			}
 
 			// Try to mark user as running
-			started, err := jobQueue.StartJob(ctx, job.UserID)
+			started, err := jobQueue.StartJob(ctx, job.UserID, job.ID)
 			if err != nil {
 				slog.Error("Failed to mark job as started", "error", err, "job_id", job.ID)
 				// Fail the job due to system error (don't hold lock)
@@ -90,7 +101,7 @@ func main() {
 			func() {
 				// Always release the user lock when done
 				defer func() {
-					if err := jobQueue.CompleteJob(ctx, job.UserID); err != nil {
+					if err := jobQueue.CompleteJob(ctx, job.UserID, job.ID); err != nil {
 						slog.Error("Failed to release user lock", "error", err, "user_id", job.UserID)
 					}
 				}()
