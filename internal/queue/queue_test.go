@@ -32,5 +32,3 @@ func TestQueueConstants(t *testing.T) {
 		t.Error("BlockTimeout should not be zero")
 	}
 }
-
-
