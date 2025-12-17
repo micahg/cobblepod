@@ -55,10 +55,14 @@ type StorageDeleter interface {
 	DeleteFile(fileID string) error
 }
 
+// StorageCreator function type for creating storage service
+type StorageCreator func(ctx context.Context, accessToken string) (storage.Storage, error)
+
 // Processor handles the main processing logic
 type Processor struct {
-	state         *state.CobblepodStateManager
-	tokenProvider auth.TokenProvider
+	state          *state.CobblepodStateManager
+	tokenProvider  auth.TokenProvider
+	storageCreator StorageCreator
 }
 
 // NewProcessor creates a new processor with default dependencies
@@ -70,8 +74,9 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 	}
 
 	return &Processor{
-		state:         state,
-		tokenProvider: &auth.DefaultTokenProvider{},
+		state:          state,
+		tokenProvider:  &auth.DefaultTokenProvider{},
+		storageCreator: storage.NewServiceWithToken,
 	}, nil
 }
 
@@ -79,10 +84,12 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 func NewProcessorWithDependencies(
 	state *state.CobblepodStateManager,
 	tokenProvider auth.TokenProvider,
+	storageCreator StorageCreator,
 ) *Processor {
 	return &Processor{
-		state:         state,
-		tokenProvider: tokenProvider,
+		state:          state,
+		tokenProvider:  tokenProvider,
+		storageCreator: storageCreator,
 	}
 }
 
@@ -103,7 +110,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	slog.Info("Successfully obtained Google access token for user", "user_id", job.UserID)
 
 	// Create storage service with user's Google token
-	userStorage, err := storage.NewServiceWithToken(ctx, googleToken)
+	userStorage, err := p.storageCreator(ctx, googleToken)
 	if err != nil {
 		return fmt.Errorf("failed to create storage service with user token: %w", err)
 	}
