@@ -37,7 +37,7 @@ func main() {
 	defer jobQueue.Close()
 
 	// Initialize processor
-	proc, err := processor.NewProcessor(ctx)
+	proc, err := processor.NewProcessor(ctx, jobQueue)
 	if err != nil {
 		slog.Error("Failed to create processor", "error", err)
 		os.Exit(1)

@@ -2,6 +2,7 @@ package sources
 
 import (
 	"cobblepod/internal/config"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/storage"
 	"context"
 	"fmt"
@@ -35,7 +36,7 @@ func (m *M3U8Source) GetLatest(ctx context.Context) (*FileInfo, error) {
 }
 
 // Process downloads and parses the M3U8 file
-func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]AudioEntry, error) {
+func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]queue.JobItem, error) {
 	fileID := fileInfo.File.Id
 
 	// Mark as processed
@@ -59,9 +60,9 @@ func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]AudioEn
 }
 
 // parseM3U8 parses M3U8 content and extracts audio entries
-func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
+func (m *M3U8Source) parseM3U8(content string) []queue.JobItem {
 	lines := strings.Split(strings.TrimSpace(content), "\n")
-	var entries []AudioEntry
+	var entries []queue.JobItem
 
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
@@ -78,11 +79,12 @@ func (m *M3U8Source) parseM3U8(content string) []AudioEntry {
 				if i+1 < len(lines) {
 					url := strings.TrimSpace(lines[i+1])
 					if url != "" && !strings.HasPrefix(url, "#") {
-						entries = append(entries, AudioEntry{
-							Title:    title,
-							Duration: time.Duration(durationSeconds * float64(time.Second)),
-							URL:      url,
-							UUID:     uuid.New().String(),
+						entries = append(entries, queue.JobItem{
+							Title:     title,
+							Duration:  time.Duration(durationSeconds * float64(time.Second)),
+							SourceURL: url,
+							ID:        uuid.New().String(),
+							Status:    queue.StatusPending,
 						})
 						i++ // Skip the URL line
 						continue

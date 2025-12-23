@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"cobblepod/internal/config"
-	"cobblepod/internal/sources"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/storage"
 )
 
@@ -202,8 +202,8 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 	return episodeMapping, nil
 }
 
-func (p *RSSProcessor) CanReuseEpisode(newEp sources.AudioEntry, oldEp ExistingEpisode, speed float64) bool {
-	// AudioEntry
+func (p *RSSProcessor) CanReuseEpisode(newEp queue.JobItem, oldEp ExistingEpisode, speed float64) bool {
+	// JobItem
 	//   Duration -> original duration
 	//   Offset -> offset into the duration
 	//

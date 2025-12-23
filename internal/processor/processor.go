@@ -18,41 +18,24 @@ import (
 	"cobblepod/internal/storage"
 )
 
-// downloadReq represents a download request
-type downloadReq struct {
-	Idx int
-	URL string
-}
-
-// downloadResult represents the result of a download
-type downloadResult struct {
-	Idx      int
+// Task represents a processing task for a single episode
+type Task struct {
+	Item     queue.JobItem
 	TempPath string
+	Result   podcast.ProcessedEpisode
 	Err      error
-}
-
-// ffmpegReq represents an FFmpeg processing request
-type ffmpegReq struct {
-	Idx      int
-	Title    string
-	Duration time.Duration
-	URL      string
-	UUID     string
-	TempPath string
-	Speed    float64
-	Offset   time.Duration
-}
-
-// ffmpegResult represents the result of FFmpeg processing
-type ffmpegResult struct {
-	Result podcast.ProcessedEpisode
-	Err    error
 }
 
 // StorageDeleter interface for dependency injection
 type StorageDeleter interface {
 	ExtractFileIDFromURL(url string) string
 	DeleteFile(fileID string) error
+}
+
+// JobTracker interface for tracking job progress
+type JobTracker interface {
+	SetJobItems(ctx context.Context, jobID string, items []queue.JobItem) error
+	UpdateJobItem(ctx context.Context, jobID string, item queue.JobItem) error
 }
 
 // StorageCreator function type for creating storage service
@@ -63,10 +46,11 @@ type Processor struct {
 	state          *state.CobblepodStateManager
 	tokenProvider  auth.TokenProvider
 	storageCreator StorageCreator
+	queue          JobTracker
 }
 
 // NewProcessor creates a new processor with default dependencies
-func NewProcessor(ctx context.Context) (*Processor, error) {
+func NewProcessor(ctx context.Context, q *queue.Queue) (*Processor, error) {
 	state, err := state.NewStateManager(ctx)
 	if err != nil {
 		slog.Error("Failed to connect to state", "error", err)
@@ -77,6 +61,7 @@ func NewProcessor(ctx context.Context) (*Processor, error) {
 		state:          state,
 		tokenProvider:  &auth.DefaultTokenProvider{},
 		storageCreator: storage.NewServiceWithToken,
+		queue:          q,
 	}, nil
 }
 
@@ -85,11 +70,13 @@ func NewProcessorWithDependencies(
 	state *state.CobblepodStateManager,
 	tokenProvider auth.TokenProvider,
 	storageCreator StorageCreator,
+	q JobTracker,
 ) *Processor {
 	return &Processor{
 		state:          state,
 		tokenProvider:  tokenProvider,
 		storageCreator: storageCreator,
+		queue:          q,
 	}
 }
 
@@ -188,7 +175,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	}
 
 	// Determine processing mode
-	var entries []sources.AudioEntry
+	var entries []queue.JobItem
 	if newM3U8 {
 		slog.Info("Processing M3U8 file", "name", m3u8File.File.Name, "modified", m3u8File.ModifiedTime.Format(time.RFC3339))
 
@@ -216,9 +203,13 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 		return nil
 	}
 
-	// TODO update job with entries
+	// Populate job items
+	if err := p.queue.SetJobItems(ctx, job.ID, entries); err != nil {
+		slog.Error("Failed to set job items", "error", err)
+	}
+	job.Items = entries
 
-	reused, err := p.processEntries(ctx, entries, episodeMapping, userStorage, audioProcessor, podcastProcessor)
+	reused, err := p.processEntries(ctx, episodeMapping, userStorage, audioProcessor, podcastProcessor, job)
 	if err != nil {
 		return err
 	}
@@ -230,93 +221,132 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 }
 
 // downloadWorker handles download requests
-func downloadWorker(ctx context.Context, processor *audio.Processor, requests <-chan downloadReq, results chan<- downloadResult) {
+func downloadWorker(ctx context.Context, processor *audio.Processor, tasks <-chan Task, results chan<- Task, q JobTracker, jobID string) {
 	defer close(results)
-	for req := range requests {
+	for task := range tasks {
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
-			results <- downloadResult{Idx: req.Idx, Err: ctx.Err()}
+			task.Err = ctx.Err()
+			results <- task
 			return
 		default:
 		}
 
-		tempPath, err := processor.DownloadFile(req.URL)
-		results <- downloadResult{
-			Idx:      req.Idx,
-			TempPath: tempPath,
-			Err:      err,
+		// Update status
+		task.Item.Status = queue.StatusDownloading
+		if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+			slog.Error("Failed to update job item status", "error", err)
 		}
+
+		tempPath, err := processor.DownloadFile(task.Item.SourceURL)
+		task.TempPath = tempPath
+		task.Err = err
+
+		if err != nil {
+			task.Item.Status = queue.StatusFailed
+			task.Item.Error = err.Error()
+			if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+				slog.Error("Failed to update job item status", "error", err)
+			}
+		}
+
+		results <- task
 	}
 }
 
 // ffmpegWorker handles FFmpeg processing requests
-func ffmpegWorker(ctx context.Context, processor *audio.Processor, jobs <-chan ffmpegReq, results chan<- ffmpegResult) {
+func ffmpegWorker(ctx context.Context, processor *audio.Processor, tasks <-chan Task, results chan<- Task, speed float64, q JobTracker, jobID string) {
 	fileCount := 0
 	defer func() {
 		slog.Info("FFmpeg worker completed", "processed_files", fileCount)
 	}()
 
-	for job := range jobs {
+	for task := range tasks {
 		fileCount++
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
-			results <- ffmpegResult{Err: ctx.Err()}
+			task.Err = ctx.Err()
+			results <- task
 			return
 		default:
 		}
 
-		slog.Info("Processing audio", "title", job.Title, "speed", job.Speed)
-		outputPath, err := processor.ProcessAudio(job.TempPath, job.Speed, job.Offset)
+		// Update status
+		task.Item.Status = queue.StatusProcessing
+		if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+			slog.Error("Failed to update job item status", "error", err)
+		}
+
+		slog.Info("Processing audio", "title", task.Item.Title, "speed", speed)
+		outputPath, err := processor.ProcessAudio(task.TempPath, speed, task.Item.Offset)
 		if err != nil {
-			slog.Error("Error processing audio", "title", job.Title, "error", err)
-			results <- ffmpegResult{Err: err}
-			// Clean up temp file
-			if cleanupErr := os.Remove(job.TempPath); cleanupErr != nil {
-				slog.Warn("Failed to remove temp file", "path", job.TempPath, "error", cleanupErr)
+			slog.Error("Error processing audio", "title", task.Item.Title, "error", err)
+			task.Err = err
+			task.Item.Status = queue.StatusFailed
+			task.Item.Error = err.Error()
+			if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+				slog.Error("Failed to update job item status", "error", err)
 			}
+
+			// Clean up temp file
+			if cleanupErr := os.Remove(task.TempPath); cleanupErr != nil {
+				slog.Warn("Failed to remove temp file", "path", task.TempPath, "error", cleanupErr)
+			}
+			results <- task
 			continue
 		}
 
 		// Clean up input temp file
-		if err := os.Remove(job.TempPath); err != nil {
-			slog.Warn("Failed to remove temp file", "path", job.TempPath, "error", err)
+		if err := os.Remove(task.TempPath); err != nil {
+			slog.Warn("Failed to remove temp file", "path", task.TempPath, "error", err)
 		}
 
-		newDuration := time.Duration(float64((job.Duration - job.Offset).Nanoseconds()) / job.Speed)
+		newDuration := time.Duration(float64((task.Item.Duration - task.Item.Offset).Nanoseconds()) / speed)
 		result := podcast.ProcessedEpisode{
-			Title:            job.Title,
-			OriginalDuration: job.Duration,
+			Title:            task.Item.Title,
+			OriginalDuration: task.Item.Duration,
 			NewDuration:      newDuration,
-			UUID:             job.UUID,
-			Speed:            job.Speed,
+			UUID:             task.Item.ID,
+			Speed:            speed,
 			TempFile:         outputPath,
 		}
 
-		results <- ffmpegResult{Result: result, Err: nil}
+		task.Result = result
+		results <- task
 	}
 }
 
 // uploadResults handles uploading processed audio files to storage backend
-func uploadResults(ctx context.Context, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
-	for i, result := range results {
+func uploadResults(ctx context.Context, storageService storage.Storage, tasks []Task, q JobTracker, jobID string) ([]podcast.ProcessedEpisode, error) {
+	var results []podcast.ProcessedEpisode
+	for i, task := range tasks {
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
 			slog.Info("Context cancelled, stopping upload")
-			return ctx.Err()
+			return nil, ctx.Err()
 		default:
 		}
+
+		result := task.Result
 
 		// Skip upload for reused files that already have download_url
 		if downloadURL := result.DownloadURL; downloadURL != "" {
 			slog.Info("Skipping upload for reused file", "title", result.Title)
 			// Extract file_id from download_url for consistency
 			if fileID := storageService.ExtractFileIDFromURL(downloadURL); fileID != "" {
-				results[i].DriveFileID = fileID
+				result.DriveFileID = fileID
 			}
+			results = append(results, result)
 			continue
+		}
+
+		// Update status
+		task.Item.Status = queue.StatusUploading
+		if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+			slog.Error("Failed to update job item status", "error", err)
 		}
 
 		slog.Info("Uploading to storage backend", "title", result.Title)
@@ -325,7 +355,10 @@ func uploadResults(ctx context.Context, storageService storage.Storage, results 
 
 		fileID, err := storageService.UploadFile(tempFile, filename, "audio/mpeg")
 		if err != nil {
-			return fmt.Errorf("failed to upload %s to storage backend: %w", result.Title, err)
+			task.Item.Status = queue.StatusFailed
+			task.Item.Error = err.Error()
+			q.UpdateJobItem(ctx, jobID, task.Item)
+			return nil, fmt.Errorf("failed to upload %s to storage backend: %w", result.Title, err)
 		}
 
 		// Clean up temp file
@@ -333,10 +366,18 @@ func uploadResults(ctx context.Context, storageService storage.Storage, results 
 			slog.Warn("Failed to remove temp file", "path", tempFile, "error", err)
 		}
 
-		results[i].DriveFileID = fileID
+		result.DriveFileID = fileID
+		results = append(results, result)
+
+		// Update status
+		task.Item.Status = queue.StatusCompleted
+		if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
+			slog.Error("Failed to update job item status", "error", err)
+		}
+		tasks[i] = task // Update task in slice if needed
 	}
 
-	return nil
+	return results, nil
 }
 
 // updateFeed creates and uploads the RSS XML feed and saves the application state
@@ -374,59 +415,69 @@ func (p *Processor) deleteUnusedEpisodes(storageService StorageDeleter, episodeM
 }
 
 // processEntries returns the reused episodes
-func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioEntry, episodeMapping map[string]podcast.ExistingEpisode, storageService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor) (map[string]podcast.ExistingEpisode, error) {
+func (p *Processor) processEntries(ctx context.Context, episodeMapping map[string]podcast.ExistingEpisode, storageService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor, job *queue.Job) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
-	var results []podcast.ProcessedEpisode
+	var tasks []Task
 
 	// Start a single downloader worker with separate job and result channels
-	dlRequests := make(chan downloadReq, len(entries))
-	dlResults := make(chan downloadResult, len(entries))
-	go downloadWorker(ctx, audioProcessor, dlRequests, dlResults)
+	dlRequests := make(chan Task, len(job.Items))
+	dlResults := make(chan Task, len(job.Items))
+	go downloadWorker(ctx, audioProcessor, dlRequests, dlResults, p.queue, job.ID)
 
 	speed := config.DefaultSpeed
 
 	reused := make(map[string]podcast.ExistingEpisode)
 	// First pass: reuse check; enqueue downloads for the rest
-	for i, entry := range entries {
-		title := entry.Title
+	for _, item := range job.Items {
+		title := item.Title
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
-			if podcastProcessor.CanReuseEpisode(entry, oldEp, speed) {
+			if podcastProcessor.CanReuseEpisode(item, oldEp, speed) {
 				slog.Info("Reusing existing processed file", "title", title)
 				reused[title] = oldEp
 				result := podcast.ProcessedEpisode{
 					Title:            title,
-					OriginalDuration: entry.Duration,
+					OriginalDuration: item.Duration,
 					NewDuration:      oldEp.Duration,
-					UUID:             entry.UUID,
+					UUID:             item.ID,
 					Speed:            speed,
 					DownloadURL:      oldEp.DownloadURL,
 					OriginalGUID:     oldEp.OriginalGUID,
 				}
-				results = append(results, result)
-				// todo set job to skipped
+
+				// Update status
+				item.Status = queue.StatusSkipped
+				if err := p.queue.UpdateJobItem(ctx, job.ID, item); err != nil {
+					slog.Error("Failed to update job item status", "error", err)
+				}
+
+				tasks = append(tasks, Task{
+					Item:   item,
+					Result: result,
+				})
 				continue
 			}
 		}
 
 		// Send request and wait for response
-		slog.Info("Enqueuing download", "title", title, "url", entry.URL)
-		dlRequests <- downloadReq{Idx: i, URL: entry.URL}
-		// todo set job to downloading
+		slog.Info("Enqueuing download", "title", title, "url", item.SourceURL)
+		dlRequests <- Task{
+			Item: item,
+		}
 	}
 	// all done sending jobs
 	close(dlRequests)
 
 	// Start FFmpeg worker
 	var wg sync.WaitGroup
-	ffmpegJobs := make(chan ffmpegReq, len(entries))
-	ffmpegResults := make(chan ffmpegResult, len(entries))
+	ffmpegJobs := make(chan Task, len(job.Items))
+	ffmpegResults := make(chan Task, len(job.Items))
 	for i := 0; i < config.MaxFFMPEGWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ffmpegWorker(ctx, audioProcessor, ffmpegJobs, ffmpegResults)
+			ffmpegWorker(ctx, audioProcessor, ffmpegJobs, ffmpegResults, speed, p.queue, job.ID)
 		}()
 	}
 
@@ -442,45 +493,39 @@ func (p *Processor) processEntries(ctx context.Context, entries []sources.AudioE
 		// Process the result
 		if res.Err != nil {
 			slog.Error("Download failed", "error", res.Err)
+			// Add failed task to results so we don't lose it?
+			// Or just skip ffmpeg
 			continue
 		}
 
-		i := res.Idx
-		ffmpegJobs <- ffmpegReq{
-			Idx:      i,
-			Title:    entries[i].Title,
-			Duration: entries[i].Duration,
-			URL:      entries[i].URL,
-			UUID:     entries[i].UUID,
-			TempPath: res.TempPath,
-			Speed:    speed,
-			Offset:   entries[i].Offset,
-		}
-		// todo set job to processing
+		ffmpegJobs <- res
 	}
 	close(ffmpegJobs)
 	wg.Wait()
 	close(ffmpegResults)
 
 	// Collect FFmpeg results
-	var newResults []podcast.ProcessedEpisode
+	var processedTasks []Task
 	for ffmpegRes := range ffmpegResults {
 		if ffmpegRes.Err != nil {
 			slog.Error("FFmpeg processing failed", "error", ffmpegRes.Err)
 			continue
 		}
-		newResults = append(newResults, ffmpegRes.Result)
+		processedTasks = append(processedTasks, ffmpegRes)
 	}
 
-	if len(newResults) == 0 {
+	// Combine reused and processed tasks
+	allTasks := append(tasks, processedTasks...)
+
+	if len(allTasks) == 0 {
 		slog.Info("Skipping uploads since no audio entries successfully processed")
 		return reused, nil
 	}
-	results = append(results, newResults...)
-	slog.Info("Processing completed", "processed_files", len(results))
+	slog.Info("Processing completed", "processed_files", len(allTasks))
 
 	// Upload processed files to storage backend
-	if err := uploadResults(ctx, storageService, results); err != nil {
+	results, err := uploadResults(ctx, storageService, allTasks, p.queue, job.ID)
+	if err != nil {
 		return nil, err
 	}
 

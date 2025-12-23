@@ -5,6 +5,7 @@ package sources
 
 import (
 	"archive/zip"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/storage"
 	"context"
 	"database/sql"
@@ -46,7 +47,7 @@ func (p *PodcastAddictBackup) GetLatest(ctx context.Context) (*FileInfo, error) 
 
 // AddListeningProgress locates the most recent backup and will (later) augment entries with offsets.
 // Currently returns an empty slice as a placeholder.
-func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries []AudioEntry) ([]ListeningProgress, error) {
+func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries []queue.JobItem) ([]ListeningProgress, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -88,7 +89,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries 
 
 // Process locates the most recent backup and processes all episodes for independent processing.
 // This is used when processing backup without M3U8 file.
-func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]AudioEntry, error) {
+func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo) ([]queue.JobItem, error) {
 	if p.drive == nil {
 		return nil, errors.New("drive service is nil")
 	}
@@ -121,7 +122,7 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 
 // queryAllEpisodes opens the SQLite database at dbPath and returns all episodes
 // without the position_to_resume > 0 filter for independent backup processing.
-func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, error) {
+func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]queue.JobItem, error) {
 	// Open read-only using a proper file URI to avoid accidental writes.
 	u := &url.URL{Scheme: "file", Path: dbPath, RawQuery: "mode=ro&_busy_timeout=5000"}
 	dsn := u.String()
@@ -152,19 +153,20 @@ func (p *PodcastAddictBackup) queryAllEpisodes(dbPath string) ([]AudioEntry, err
 	}
 	defer rows.Close()
 
-	results := make([]AudioEntry, 0, 64)
+	results := make([]queue.JobItem, 0, 64)
 	for rows.Next() {
-		var ae AudioEntry
+		var ae queue.JobItem
 		var podcast string
 		var episode string
 		var offsetMs, durationMs int64
-		if err := rows.Scan(&podcast, &ae.URL, &offsetMs, &durationMs, &episode); err != nil {
+		if err := rows.Scan(&podcast, &ae.SourceURL, &offsetMs, &durationMs, &episode); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		ae.Title = fmt.Sprintf("%s - %s", podcast, episode)
-		ae.UUID = uuid.New().String()
+		ae.ID = uuid.New().String()
 		ae.Offset = time.Duration(offsetMs) * time.Millisecond
 		ae.Duration = time.Duration(durationMs) * time.Millisecond
+		ae.Status = queue.StatusPending
 		results = append(results, ae)
 	}
 	if err := rows.Err(); err != nil {
@@ -267,7 +269,7 @@ func (p *PodcastAddictBackup) queryListeningProgress(dbPath string) ([]Listening
 
 // updateEntries applies listening progress offsets into the provided entries slice.
 // Key format mirrors Python: "<podcast> - <episode>".
-func (p *PodcastAddictBackup) updateEntries(progress []ListeningProgress, entries []AudioEntry) {
+func (p *PodcastAddictBackup) updateEntries(progress []ListeningProgress, entries []queue.JobItem) {
 	for _, pr := range progress {
 		key := fmt.Sprintf("%s - %s", pr.Podcast, pr.Episode)
 		// Find matching entry by title and update its offset
