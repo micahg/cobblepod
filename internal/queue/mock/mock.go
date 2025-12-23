@@ -11,7 +11,8 @@ import (
 // MockQueue is a mock implementation of the Queue for testing
 type MockQueue struct {
 	mu           sync.RWMutex
-	runningUsers map[string]bool
+	runningUsers map[string]string // UserID -> JobID
+	runningJobs  map[string]bool   // JobID -> bool
 	waitingJobs  []*queue.Job
 	failedJobs   []*queue.Job
 }
@@ -19,7 +20,8 @@ type MockQueue struct {
 // NewMockQueue creates a new mock queue
 func NewMockQueue() *MockQueue {
 	return &MockQueue{
-		runningUsers: make(map[string]bool),
+		runningUsers: make(map[string]string),
+		runningJobs:  make(map[string]bool),
 		waitingJobs:  make([]*queue.Job, 0),
 		failedJobs:   make([]*queue.Job, 0),
 	}
@@ -30,7 +32,8 @@ func (m *MockQueue) IsUserRunning(ctx context.Context, userID string) (bool, err
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.runningUsers[userID], nil
+	_, exists := m.runningUsers[userID]
+	return exists, nil
 }
 
 // Enqueue adds a job to the queue
@@ -58,24 +61,26 @@ func (m *MockQueue) Dequeue(ctx context.Context) (*queue.Job, error) {
 }
 
 // StartJob marks a user as having a running job
-func (m *MockQueue) StartJob(ctx context.Context, userID string) (bool, error) {
+func (m *MockQueue) StartJob(ctx context.Context, userID string, jobID string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.runningUsers[userID] {
+	if _, exists := m.runningUsers[userID]; exists {
 		return false, nil
 	}
 
-	m.runningUsers[userID] = true
+	m.runningUsers[userID] = jobID
+	m.runningJobs[jobID] = true
 	return true, nil
 }
 
 // CompleteJob marks a job as complete and removes user from running set
-func (m *MockQueue) CompleteJob(ctx context.Context, userID string) error {
+func (m *MockQueue) CompleteJob(ctx context.Context, userID string, jobID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	delete(m.runningUsers, userID)
+	delete(m.runningJobs, jobID)
 	return nil
 }
 
@@ -86,6 +91,7 @@ func (m *MockQueue) FailJob(ctx context.Context, job *queue.Job, reason string) 
 
 	job.FailReason = reason
 	m.failedJobs = append(m.failedJobs, job)
+	delete(m.runningJobs, job.ID)
 	return nil
 }
 
@@ -97,9 +103,53 @@ func (m *MockQueue) QueueLength(ctx context.Context) (int64, error) {
 	return int64(len(m.waitingJobs)), nil
 }
 
+// CleanupExpiredJobs removes expired jobs from sets (Mock implementation)
+func (m *MockQueue) CleanupExpiredJobs(ctx context.Context) error {
+	return nil
+}
+
 // Close closes the queue connection (no-op for mock)
 func (m *MockQueue) Close() error {
 	return nil
+}
+
+// GetJob retrieves a job by ID (Mock implementation)
+func (m *MockQueue) GetJob(ctx context.Context, jobID string) (*queue.Job, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Search in waiting
+	for _, job := range m.waitingJobs {
+		if job.ID == jobID {
+			return job, nil
+		}
+	}
+	// Search in failed
+	for _, job := range m.failedJobs {
+		if job.ID == jobID {
+			return job, nil
+		}
+	}
+	return nil, nil
+}
+
+// GetUserJobs retrieves all jobs for a user (Mock implementation)
+func (m *MockQueue) GetUserJobs(ctx context.Context, userID string) ([]*queue.Job, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var jobs []*queue.Job
+	for _, job := range m.waitingJobs {
+		if job.UserID == userID {
+			jobs = append(jobs, job)
+		}
+	}
+	for _, job := range m.failedJobs {
+		if job.UserID == userID {
+			jobs = append(jobs, job)
+		}
+	}
+	return jobs, nil
 }
 
 // Test helper methods
@@ -110,7 +160,7 @@ func (m *MockQueue) SetUserRunning(userID string, running bool) {
 	defer m.mu.Unlock()
 
 	if running {
-		m.runningUsers[userID] = true
+		m.runningUsers[userID] = "mock-job-id"
 	} else {
 		delete(m.runningUsers, userID)
 	}
@@ -141,21 +191,24 @@ func (m *MockQueue) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.runningUsers = make(map[string]bool)
+	m.runningUsers = make(map[string]string)
+	m.runningJobs = make(map[string]bool)
 	m.waitingJobs = make([]*queue.Job, 0)
 	m.failedJobs = make([]*queue.Job, 0)
 }
 
 // Compile-time check that MockQueue implements the same interface as Queue
-// This will fail if Queue adds new methods that MockQueue doesn't implement
 var _ interface {
 	IsUserRunning(ctx context.Context, userID string) (bool, error)
 	Enqueue(ctx context.Context, job *queue.Job) error
 	Dequeue(ctx context.Context) (*queue.Job, error)
-	StartJob(ctx context.Context, userID string) (bool, error)
-	CompleteJob(ctx context.Context, userID string) error
+	StartJob(ctx context.Context, userID string, jobID string) (bool, error)
+	CompleteJob(ctx context.Context, userID string, jobID string) error
 	FailJob(ctx context.Context, job *queue.Job, reason string) error
+	CleanupExpiredJobs(ctx context.Context) error
 	QueueLength(ctx context.Context) (int64, error)
+	GetJob(ctx context.Context, jobID string) (*queue.Job, error)
+	GetUserJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	Close() error
 } = (*MockQueue)(nil)
 
@@ -170,6 +223,7 @@ const (
 	ErrorOnStartJob
 	ErrorOnCompleteJob
 	ErrorOnFailJob
+	ErrorOnCleanupExpiredJobs
 	ErrorOnQueueLength
 )
 
@@ -208,18 +262,18 @@ func (m *MockQueueWithErrors) Dequeue(ctx context.Context) (*queue.Job, error) {
 	return m.MockQueue.Dequeue(ctx)
 }
 
-func (m *MockQueueWithErrors) StartJob(ctx context.Context, userID string) (bool, error) {
+func (m *MockQueueWithErrors) StartJob(ctx context.Context, userID string, jobID string) (bool, error) {
 	if m.errorMode == ErrorOnStartJob {
 		return false, fmt.Errorf("mock error: StartJob failed")
 	}
-	return m.MockQueue.StartJob(ctx, userID)
+	return m.MockQueue.StartJob(ctx, userID, jobID)
 }
 
-func (m *MockQueueWithErrors) CompleteJob(ctx context.Context, userID string) error {
+func (m *MockQueueWithErrors) CompleteJob(ctx context.Context, userID string, jobID string) error {
 	if m.errorMode == ErrorOnCompleteJob {
 		return fmt.Errorf("mock error: CompleteJob failed")
 	}
-	return m.MockQueue.CompleteJob(ctx, userID)
+	return m.MockQueue.CompleteJob(ctx, userID, jobID)
 }
 
 func (m *MockQueueWithErrors) FailJob(ctx context.Context, job *queue.Job, reason string) error {
@@ -227,6 +281,13 @@ func (m *MockQueueWithErrors) FailJob(ctx context.Context, job *queue.Job, reaso
 		return fmt.Errorf("mock error: FailJob failed")
 	}
 	return m.MockQueue.FailJob(ctx, job, reason)
+}
+
+func (m *MockQueueWithErrors) CleanupExpiredJobs(ctx context.Context) error {
+	if m.errorMode == ErrorOnCleanupExpiredJobs {
+		return fmt.Errorf("mock error: CleanupExpiredJobs failed")
+	}
+	return m.MockQueue.CleanupExpiredJobs(ctx)
 }
 
 func (m *MockQueueWithErrors) QueueLength(ctx context.Context) (int64, error) {

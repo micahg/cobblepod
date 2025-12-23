@@ -24,7 +24,7 @@ type GDrive struct {
 
 // NewServiceWithToken creates a new Google Drive service using an OAuth2 token
 // This creates a per-request client for a specific user
-func NewServiceWithToken(ctx context.Context, accessToken string) (*GDrive, error) {
+func NewServiceWithToken(ctx context.Context, accessToken string) (Storage, error) {
 	if accessToken == "" {
 		return nil, fmt.Errorf("access token is required")
 	}
@@ -48,7 +48,7 @@ func NewServiceWithToken(ctx context.Context, accessToken string) (*GDrive, erro
 	return &GDrive{drive: service, ctx: ctx}, nil
 }
 
-func NewServiceWithClient(client *drive.Service) *GDrive {
+func NewServiceWithClient(client *drive.Service) Storage {
 	return &GDrive{drive: client, ctx: context.Background()}
 }
 

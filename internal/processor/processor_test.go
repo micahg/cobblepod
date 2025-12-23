@@ -1,10 +1,26 @@
 package processor
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"cobblepod/internal/auth"
 	"cobblepod/internal/podcast"
+	"cobblepod/internal/queue"
+	"cobblepod/internal/storage/mock"
 )
+
+// MockJobTracker is a mock implementation of the JobTracker interface
+type MockJobTracker struct{}
+
+func (m *MockJobTracker) SetJobItems(ctx context.Context, jobID string, items []queue.JobItem) error {
+	return nil
+}
+
+func (m *MockJobTracker) UpdateJobItem(ctx context.Context, jobID string, item queue.JobItem) error {
+	return nil
+}
 
 // MockGDriveService is a mock implementation of the GDriveDeleter interface for testing
 type MockGDriveService struct {
@@ -137,7 +153,7 @@ func TestDeleteUnusedEpisodes(t *testing.T) {
 			}
 
 			// Call the actual function using our mock
-			proc := NewProcessorWithDependencies(nil)
+			proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
 			proc.deleteUnusedEpisodes(mockService, tt.episodeMapping, tt.reused)
 
 			// Check results
@@ -173,7 +189,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		mockService := NewMockGDriveService()
 
 		// This should not panic
-		proc := NewProcessorWithDependencies(nil)
+		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
 		proc.deleteUnusedEpisodes(mockService, nil, nil)
 
 		deletedFiles := mockService.GetDeletedFiles()
@@ -190,7 +206,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		}
 		reused := map[string]podcast.ExistingEpisode{}
 
-		proc := NewProcessorWithDependencies(nil)
+		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
 		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()
@@ -210,7 +226,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 			"Episode 1": {DownloadURL: "https://drive.google.com/file/d/file1", OriginalGUID: "guid2"},
 		}
 
-		proc := NewProcessorWithDependencies(nil)
+		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
 		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()
@@ -218,4 +234,55 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 			t.Errorf("Expected no deletions when episode is reused (regardless of data differences), got %d", len(deletedFiles))
 		}
 	})
+}
+
+func TestProcessor_Run_AuthFailure(t *testing.T) {
+	mockTokenProvider := &auth.MockTokenProvider{
+		Err: errors.New("auth failed"),
+	}
+
+	proc := NewProcessorWithDependencies(nil, mockTokenProvider, nil, &MockJobTracker{})
+
+	job := &queue.Job{
+		ID:     "job1",
+		FileID: "file1",
+		UserID: "user1",
+	}
+
+	err := proc.Run(context.Background(), job)
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+
+	expectedError := "failed to get Google access token for user user1: auth failed"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error %q, got %q", expectedError, err.Error())
+	}
+}
+
+func TestProcessor_Run_StorageCreationFailure(t *testing.T) {
+	mockTokenProvider := &auth.MockTokenProvider{
+		Token: "valid-token",
+	}
+
+	expectedErr := errors.New("storage creation failed")
+	mockStorageCreator := mock.NewMockStorageCreator(nil, expectedErr)
+
+	proc := NewProcessorWithDependencies(nil, mockTokenProvider, mockStorageCreator, &MockJobTracker{})
+
+	job := &queue.Job{
+		ID:     "job1",
+		FileID: "file1",
+		UserID: "user1",
+	}
+
+	err := proc.Run(context.Background(), job)
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+
+	expectedErrorMsg := "failed to create storage service with user token: storage creation failed"
+	if err.Error() != expectedErrorMsg {
+		t.Errorf("Expected error %q, got %q", expectedErrorMsg, err.Error())
+	}
 }

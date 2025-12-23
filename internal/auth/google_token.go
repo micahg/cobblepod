@@ -10,6 +10,18 @@ import (
 	"strings"
 )
 
+// TokenProvider interface for dependency injection
+type TokenProvider interface {
+	GetGoogleAccessToken(ctx context.Context, userID string) (string, error)
+}
+
+// DefaultTokenProvider implementation
+type DefaultTokenProvider struct{}
+
+func (p *DefaultTokenProvider) GetGoogleAccessToken(ctx context.Context, userID string) (string, error) {
+	return GetGoogleAccessToken(ctx, userID)
+}
+
 // GetGoogleAccessToken exchanges Auth0 token for Google access token using the user ID from context
 func GetGoogleAccessToken(ctx context.Context, userID string) (string, error) {
 	config := GetAuth0Config()

@@ -63,13 +63,14 @@ jobs:
       id: test-step
       working-directory: ${{ inputs.working-directory }}
       run: |
-        go test -v -race -coverprofile=coverage.out ./...
+        make test-server-integration
         echo "result=success" >> $GITHUB_OUTPUT
 
     - name: Upload coverage to Codecov
       if: success()
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ inputs.working-directory }}/coverage.out
         directory: ${{ inputs.working-directory }}
         flags: unittests

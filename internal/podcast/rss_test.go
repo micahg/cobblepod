@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"cobblepod/internal/sources"
+	"cobblepod/internal/queue"
 	"cobblepod/internal/storage/mock"
 )
 
 func TestCanReuseEpisode(t *testing.T) {
 	tests := []struct {
 		name                    string
-		newEpisode              sources.AudioEntry
+		newEpisode              queue.JobItem
 		existingEpisode         ExistingEpisode
 		speed                   float64
 		extractFileIDResult     string
@@ -23,7 +23,7 @@ func TestCanReuseEpisode(t *testing.T) {
 	}{
 		{
 			name: "perfect_match_with_good_file_id",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 60 * time.Second, // 60 seconds
 				Offset:   10 * time.Second, // 10 second offset
@@ -42,7 +42,7 @@ func TestCanReuseEpisode(t *testing.T) {
 		},
 		{
 			name: "empty_file_id_should_return_false",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 60 * time.Second,
 				Offset:   10 * time.Second,
@@ -62,7 +62,7 @@ func TestCanReuseEpisode(t *testing.T) {
 		},
 		{
 			name: "valid_file_id_but_file_does_not_exist",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 60 * time.Second,
 				Offset:   10 * time.Second,
@@ -81,7 +81,7 @@ func TestCanReuseEpisode(t *testing.T) {
 		},
 		{
 			name: "duration_mismatch_with_good_file_id",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 70 * time.Second, // Different original duration
 				Offset:   10 * time.Second,
@@ -100,7 +100,7 @@ func TestCanReuseEpisode(t *testing.T) {
 		},
 		{
 			name: "processed_duration_mismatch_with_good_file_id",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 60 * time.Second,
 				Offset:   20 * time.Second, // Different offset
@@ -119,7 +119,7 @@ func TestCanReuseEpisode(t *testing.T) {
 		},
 		{
 			name: "speed_adjustment_with_good_file_id",
-			newEpisode: sources.AudioEntry{
+			newEpisode: queue.JobItem{
 				Title:    "Test Episode",
 				Duration: 60 * time.Second,
 				Offset:   10 * time.Second,
