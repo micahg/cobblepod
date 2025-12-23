@@ -84,8 +84,8 @@ type JobItem struct {
 	Status    JobItemStatus `json:"status"`
 	SourceURL string        `json:"source_url"`
 	Error     string        `json:"error,omitempty"`
-	Duration  time.Duration `json:"duration"`
-	Offset    time.Duration `json:"offset,omitempty"`
+	Duration  time.Duration `json:"duration" swaggertype:"integer"`
+	Offset    time.Duration `json:"offset,omitempty" swaggertype:"integer"`
 }
 
 // Job represents a backup processing job

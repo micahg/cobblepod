@@ -12,6 +12,11 @@ import (
 	"cobblepod/internal/server"
 )
 
+// @title           Cobblepod API
+// @version         1.0
+// @description     API for the Cobblepod podcast manager.
+// @host            localhost:8080
+// @BasePath        /api
 func main() {
 	// Initialize structured logging
 	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{

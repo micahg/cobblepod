@@ -33,6 +33,15 @@ type BackupUploadResponse struct {
 }
 
 // HandleBackupUpload processes backup file upload
+// @Summary      Upload backup file
+// @Description  Uploads a backup file to be processed
+// @Tags         backup
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        file formData file true "Backup file"
+// @Success      200  {object}  BackupUploadResponse
+// @Failure      401  {object}  BackupUploadResponse
+// @Router       /backup/upload [post]
 func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user ID from context (set by Auth0Middleware)

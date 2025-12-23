@@ -23,6 +23,15 @@ type GetJobsResponse struct {
 }
 
 // HandleGetJobs returns a handler that retrieves jobs based on status
+// @Summary      Get jobs
+// @Description  Get a list of jobs for the authenticated user, optionally filtered by status
+// @Tags         jobs
+// @Produce      json
+// @Param        status query string false "Job status filter"
+// @Success      200  {object}  GetJobsResponse
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /jobs [get]
 func HandleGetJobs(jobQueue JobQueue) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		status := c.Query("status")
