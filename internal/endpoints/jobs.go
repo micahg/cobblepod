@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"context"
 	"net/http"
 
 	"cobblepod/internal/queue"
@@ -8,19 +9,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// JobQueue defines the interface for job queue operations
+type JobQueue interface {
+	GetWaitingJobs(ctx context.Context, userID string) ([]*queue.Job, error)
+	GetRunningJobs(ctx context.Context, userID string) ([]*queue.Job, error)
+	GetFailedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
+	GetCompletedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
+}
+
 // GetJobsResponse represents the response for the jobs endpoint
 type GetJobsResponse struct {
-	Waiting   []*queue.Job `json:"waiting,omitempty"`
-	Running   []*queue.Job `json:"running,omitempty"`
-	Completed []*queue.Job `json:"completed,omitempty"`
-	Failed    []*queue.Job `json:"failed,omitempty"`
+	Jobs []*queue.Job `json:"jobs"`
 }
 
 // HandleGetJobs returns a handler that retrieves jobs based on status
-func HandleGetJobs(jobQueue *queue.Queue) gin.HandlerFunc {
+func HandleGetJobs(jobQueue JobQueue) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		status := c.Query("status")
-		response := GetJobsResponse{}
+		var jobs []*queue.Job
 		ctx := c.Request.Context()
 
 		userID, err := GetUserID(c)
@@ -29,9 +35,8 @@ func HandleGetJobs(jobQueue *queue.Queue) gin.HandlerFunc {
 			return
 		}
 
-		// If status is "active" or empty, fetch waiting and running jobs
-		if status == "active" || status == "" {
-			response.Waiting, err = jobQueue.GetWaitingJobs(ctx, userID)
+		if status == "" {
+			waiting, err := jobQueue.GetWaitingJobs(ctx, userID)
 			if err != nil {
 				if err == queue.ErrUserIDRequired {
 					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -40,8 +45,9 @@ func HandleGetJobs(jobQueue *queue.Queue) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch waiting jobs"})
 				return
 			}
+			jobs = append(jobs, waiting...)
 
-			response.Running, err = jobQueue.GetRunningJobs(ctx, userID)
+			running, err := jobQueue.GetRunningJobs(ctx, userID)
 			if err != nil {
 				if err == queue.ErrUserIDRequired {
 					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -50,21 +56,9 @@ func HandleGetJobs(jobQueue *queue.Queue) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch running jobs"})
 				return
 			}
-		}
-
-		// If status is "inactive" or empty, fetch completed and failed jobs
-		if status == "inactive" || status == "" {
-			response.Completed, err = jobQueue.GetCompletedJobs(ctx, userID)
-			if err != nil {
-				if err == queue.ErrUserIDRequired {
-					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-					return
-				}
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch completed jobs"})
-				return
-			}
-
-			response.Failed, err = jobQueue.GetFailedJobs(ctx, userID)
+			jobs = append(jobs, running...)
+		} else if status == "failed" {
+			failed, err := jobQueue.GetFailedJobs(ctx, userID)
 			if err != nil {
 				if err == queue.ErrUserIDRequired {
 					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -73,8 +67,20 @@ func HandleGetJobs(jobQueue *queue.Queue) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch failed jobs"})
 				return
 			}
+			jobs = append(jobs, failed...)
+		} else if status == "completed" {
+			completed, err := jobQueue.GetCompletedJobs(ctx, userID)
+			if err != nil {
+				if err == queue.ErrUserIDRequired {
+					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+					return
+				}
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch completed jobs"})
+				return
+			}
+			jobs = append(jobs, completed...)
 		}
 
-		c.JSON(http.StatusOK, response)
+		c.JSON(http.StatusOK, GetJobsResponse{Jobs: jobs})
 	}
 }
