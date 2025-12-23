@@ -25,5 +25,12 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 		{
 			backup.POST("/upload", HandleBackupUpload(jobQueue))
 		}
+
+		// Job routes (protected)
+		jobs := api.Group("/jobs")
+		jobs.Use(Auth0Middleware())
+		{
+			jobs.GET("", HandleGetJobs(jobQueue))
+		}
 	}
 }
