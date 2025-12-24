@@ -1,0 +1,225 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "API for the Cobblepod podcast manager.",
+        "title": "Cobblepod API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {
+        "/backup/upload": {
+            "post": {
+                "description": "Uploads a backup file to be processed",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup"
+                ],
+                "summary": "Upload backup file",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Backup file",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.BackupUploadResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.BackupUploadResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs": {
+            "get": {
+                "description": "Get a list of jobs for the authenticated user, optionally filtered by status",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Get jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job status filter",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.GetJobsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "endpoints.BackupUploadResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "file_id": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "endpoints.GetJobsResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/queue.Job"
+                    }
+                }
+            }
+        },
+        "queue.Job": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "fail_reason": {
+                    "description": "Set when job fails",
+                    "type": "string"
+                },
+                "file_id": {
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "items": {
+                    "description": "Items are stored in a separate hash",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/queue.JobItem"
+                    }
+                },
+                "status": {
+                    "description": "queued, running, completed, failed",
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "queue.JobItem": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "source_url": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/queue.JobItemStatus"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "queue.JobItemStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "downloading",
+                "processing",
+                "uploading",
+                "completed",
+                "skipped",
+                "failed"
+            ],
+            "x-enum-comments": {
+                "StatusProcessing": "ffmpeg",
+                "StatusSkipped": "reused"
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "ffmpeg",
+                "",
+                "",
+                "reused",
+                ""
+            ],
+            "x-enum-varnames": [
+                "StatusPending",
+                "StatusDownloading",
+                "StatusProcessing",
+                "StatusUploading",
+                "StatusCompleted",
+                "StatusSkipped",
+                "StatusFailed"
+            ]
+        }
+    }
+}

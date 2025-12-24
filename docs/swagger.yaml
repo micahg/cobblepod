@@ -1,0 +1,156 @@
+basePath: /api
+definitions:
+  endpoints.BackupUploadResponse:
+    properties:
+      error:
+        type: string
+      file_id:
+        type: string
+      job_id:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  endpoints.GetJobsResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/queue.Job'
+        type: array
+    type: object
+  queue.Job:
+    properties:
+      created_at:
+        type: string
+      fail_reason:
+        description: Set when job fails
+        type: string
+      file_id:
+        type: string
+      filename:
+        type: string
+      id:
+        type: string
+      items:
+        description: Items are stored in a separate hash
+        items:
+          $ref: '#/definitions/queue.JobItem'
+        type: array
+      status:
+        description: queued, running, completed, failed
+        type: string
+      user_id:
+        type: string
+    type: object
+  queue.JobItem:
+    properties:
+      duration:
+        type: integer
+      error:
+        type: string
+      id:
+        type: string
+      offset:
+        type: integer
+      source_url:
+        type: string
+      status:
+        $ref: '#/definitions/queue.JobItemStatus'
+      title:
+        type: string
+    type: object
+  queue.JobItemStatus:
+    enum:
+    - pending
+    - downloading
+    - processing
+    - uploading
+    - completed
+    - skipped
+    - failed
+    type: string
+    x-enum-comments:
+      StatusProcessing: ffmpeg
+      StatusSkipped: reused
+    x-enum-descriptions:
+    - ""
+    - ""
+    - ffmpeg
+    - ""
+    - ""
+    - reused
+    - ""
+    x-enum-varnames:
+    - StatusPending
+    - StatusDownloading
+    - StatusProcessing
+    - StatusUploading
+    - StatusCompleted
+    - StatusSkipped
+    - StatusFailed
+host: localhost:8080
+info:
+  contact: {}
+  description: API for the Cobblepod podcast manager.
+  title: Cobblepod API
+  version: "1.0"
+paths:
+  /backup/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads a backup file to be processed
+      parameters:
+      - description: Backup file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/endpoints.BackupUploadResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/endpoints.BackupUploadResponse'
+      summary: Upload backup file
+      tags:
+      - backup
+  /jobs:
+    get:
+      description: Get a list of jobs for the authenticated user, optionally filtered
+        by status
+      parameters:
+      - description: Job status filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/endpoints.GetJobsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get jobs
+      tags:
+      - jobs
+swagger: "2.0"

@@ -11,6 +11,10 @@ build-server:
 # Build all binaries
 build: build-worker build-server
 
+# Generate Swagger documentation
+swagger:
+	swag init -g cmd/server/main.go
+
 # Run the worker
 run-worker:
 	go run cmd/worker/main.go
