@@ -1,0 +1,66 @@
+.dashboardContainer {
+  padding: 20px;
+  margin: 2rem auto;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  min-width: 300px;
+  color: #333;
+}
+
+.jobList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.jobItem {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.jobItem:last-child {
+  border-bottom: none;
+}
+
+.jobHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+
+.jobStatus {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  text-transform: uppercase;
+}
+
+.status-waiting {
+  background-color: #e0e0e0;
+  color: #555;
+}
+
+.status-running {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-completed {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-failed {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.jobTime {
+  font-size: 0.8em;
+  color: #666;
+}
