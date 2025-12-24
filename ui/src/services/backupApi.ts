@@ -27,6 +27,10 @@ export interface Job {
   created_at: string;
   fail_reason?: string;
   status: string;
+  items?: JobItem[];
+}
+
+export interface GetJobItemsResponse {
   items: JobItem[];
 }
 
@@ -103,7 +107,10 @@ export const backupApi = createApi({
       query: () => '/jobs',
       providesTags: ['Jobs'],
     }),
+    getJobItems: builder.query<GetJobItemsResponse, string>({
+      query: (jobId) => `/jobs/${jobId}/items`,
+    }),
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery } = backupApi;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery } = backupApi;

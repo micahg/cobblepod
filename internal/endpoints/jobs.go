@@ -15,6 +15,7 @@ type JobQueue interface {
 	GetRunningJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	GetFailedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	GetCompletedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
+	GetJobItems(ctx context.Context, jobID string) ([]queue.JobItem, error)
 }
 
 // GetJobsResponse represents the response for the jobs endpoint
@@ -91,5 +92,41 @@ func HandleGetJobs(jobQueue JobQueue) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, GetJobsResponse{Jobs: jobs})
+	}
+}
+
+// GetJobItemsResponse represents the response for the job items endpoint
+type GetJobItemsResponse struct {
+	Items []queue.JobItem `json:"items"`
+}
+
+// HandleGetJobItems returns a handler that retrieves items for a specific job
+// @Summary      Get job items
+// @Description  Get a list of items for a specific job
+// @Tags         jobs
+// @Produce      json
+// @Param        id path string true "Job ID"
+// @Success      200  {object}  GetJobItemsResponse
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /jobs/{id}/items [get]
+func HandleGetJobItems(jobQueue JobQueue) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		jobID := c.Param("id")
+		ctx := c.Request.Context()
+
+		_, err := GetUserID(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		items, err := jobQueue.GetJobItems(ctx, jobID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch job items"})
+			return
+		}
+
+		c.JSON(http.StatusOK, GetJobItemsResponse{Items: items})
 	}
 }
