@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGetJobsQuery } from '../../services/backupApi';
 import styles from './JobDashboard.module.css';
 
 const JobDashboard: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const { data, error, isLoading } = useGetJobsQuery(undefined, {
     pollingInterval: 5000, // Poll every 5 seconds
   });
@@ -16,6 +17,11 @@ const JobDashboard: React.FC = () => {
   }
 
   const jobs = data?.jobs || [];
+
+  const activeJobs = jobs.filter(job => ['waiting', 'running'].includes(job.status.toLowerCase()));
+  const historyJobs = jobs.filter(job => ['completed', 'failed'].includes(job.status.toLowerCase()));
+
+  const displayedJobs = activeTab === 'active' ? activeJobs : historyJobs;
 
   const getStatusClass = (status: string) => {
     switch (status.toLowerCase()) {
@@ -39,11 +45,26 @@ const JobDashboard: React.FC = () => {
   return (
     <div className={styles.dashboardContainer}>
       <h2>Job Status</h2>
-      {jobs.length === 0 ? (
-        <p>No jobs found.</p>
+      <div className={styles.tabs}>
+        <button 
+          className={`${styles.tabButton} ${activeTab === 'active' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('active')}
+        >
+          Active ({activeJobs.length})
+        </button>
+        <button 
+          className={`${styles.tabButton} ${activeTab === 'history' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('history')}
+        >
+          History ({historyJobs.length})
+        </button>
+      </div>
+
+      {displayedJobs.length === 0 ? (
+        <p>No {activeTab} jobs found.</p>
       ) : (
         <ul className={styles.jobList}>
-          {jobs.map((job) => (
+          {displayedJobs.map((job) => (
             <li key={job.id} className={styles.jobItem}>
               <div className={styles.jobHeader}>
                 <span>ID: {job.id.substring(0, 8)}...</span>
