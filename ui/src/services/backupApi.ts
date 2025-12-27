@@ -9,6 +9,35 @@ export interface UploadBackupResponse {
   error?: string;
 }
 
+export interface JobItem {
+  id: string;
+  title: string;
+  status: string;
+  source_url: string;
+  error?: string;
+  duration: number;
+  offset?: number;
+}
+
+export interface Job {
+  id: string;
+  file_id: string;
+  user_id?: string;
+  filename?: string;
+  created_at: string;
+  fail_reason?: string;
+  status: string;
+  items?: JobItem[];
+}
+
+export interface GetJobItemsResponse {
+  items: JobItem[];
+}
+
+export interface GetJobsResponse {
+  jobs: Job[];
+}
+
 // Get the API base URL from runtime config
 const getBaseUrl = () => {
   // Use runtime config if loaded
@@ -59,7 +88,7 @@ export const backupApi = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Backup'],
+  tagTypes: ['Backup', 'Jobs'],
   endpoints: (builder) => ({
     uploadBackup: builder.mutation<UploadBackupResponse, File>({
       query: (file) => {
@@ -72,9 +101,16 @@ export const backupApi = createApi({
           body: formData,
         };
       },
-      invalidatesTags: ['Backup'],
+      invalidatesTags: ['Backup', 'Jobs'],
+    }),
+    getJobs: builder.query<GetJobsResponse, void>({
+      query: () => '/jobs',
+      providesTags: ['Jobs'],
+    }),
+    getJobItems: builder.query<GetJobItemsResponse, string>({
+      query: (jobId) => `/jobs/${jobId}/items`,
     }),
   }),
 });
 
-export const { useUploadBackupMutation } = backupApi;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery } = backupApi;

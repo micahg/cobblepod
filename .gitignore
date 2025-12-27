@@ -9,3 +9,4 @@ ui/.env.local
 cobblepod-server
 cobblepod-worker
 coverage.out
+node_modules

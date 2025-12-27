@@ -114,19 +114,29 @@ func (m *MockQueue) Close() error {
 }
 
 // GetJob retrieves a job by ID (Mock implementation)
-func (m *MockQueue) GetJob(ctx context.Context, jobID string) (*queue.Job, error) {
+func (m *MockQueue) GetJob(ctx context.Context, jobID string, includeItems bool) (*queue.Job, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	// Search in waiting
 	for _, job := range m.waitingJobs {
 		if job.ID == jobID {
+			if !includeItems {
+				jobCopy := *job
+				jobCopy.Items = nil
+				return &jobCopy, nil
+			}
 			return job, nil
 		}
 	}
 	// Search in failed
 	for _, job := range m.failedJobs {
 		if job.ID == jobID {
+			if !includeItems {
+				jobCopy := *job
+				jobCopy.Items = nil
+				return &jobCopy, nil
+			}
 			return job, nil
 		}
 	}
@@ -207,7 +217,7 @@ var _ interface {
 	FailJob(ctx context.Context, job *queue.Job, reason string) error
 	CleanupExpiredJobs(ctx context.Context) error
 	QueueLength(ctx context.Context) (int64, error)
-	GetJob(ctx context.Context, jobID string) (*queue.Job, error)
+	GetJob(ctx context.Context, jobID string, includeItems bool) (*queue.Job, error)
 	GetUserJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	Close() error
 } = (*MockQueue)(nil)

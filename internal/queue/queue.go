@@ -97,7 +97,7 @@ type Job struct {
 	CreatedAt  time.Time `json:"created_at" redis:"created_at"`
 	FailReason string    `json:"fail_reason,omitempty" redis:"fail_reason"` // Set when job fails
 	Status     string    `json:"status" redis:"status"`                     // queued, running, completed, failed
-	Items      []JobItem `json:"items" redis:"-"`                           // Items are stored in a separate hash
+	Items      []JobItem `json:"items,omitempty" redis:"-"`                 // Items are stored in a separate hash
 }
 
 // Queue manages the Redis job queue
@@ -261,7 +261,7 @@ func (q *Queue) Dequeue(ctx context.Context) (*Job, error) {
 
 	jobID := result[1]
 
-	return q.GetJob(ctx, jobID)
+	return q.GetJob(ctx, jobID, true)
 }
 
 // StartJob marks a user as having a running job
@@ -392,7 +392,7 @@ func (q *Queue) QueueLength(ctx context.Context) (int64, error) {
 }
 
 // GetJob retrieves a job by ID
-func (q *Queue) GetJob(ctx context.Context, jobID string) (*Job, error) {
+func (q *Queue) GetJob(ctx context.Context, jobID string, includeItems bool) (*Job, error) {
 	if q.client == nil {
 		return nil, fmt.Errorf("queue is not connected")
 	}
@@ -406,27 +406,45 @@ func (q *Queue) GetJob(ctx context.Context, jobID string) (*Job, error) {
 		return nil, nil // Not found
 	}
 
+	if includeItems {
+		items, err := q.GetJobItems(ctx, jobID)
+		if err != nil {
+			return nil, err
+		}
+		job.Items = items
+	}
+
+	return &job, nil
+}
+
+// GetJobItems retrieves items for a job
+func (q *Queue) GetJobItems(ctx context.Context, jobID string) ([]JobItem, error) {
+	if q.client == nil {
+		return nil, fmt.Errorf("queue is not connected")
+	}
+
 	// Fetch items
 	itemsMap, err := q.client.HGetAll(ctx, q.jobItemsKey(jobID)).Result()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch job items: %w", err)
 	}
 
+	var items []JobItem
 	for _, itemJSON := range itemsMap {
 		var item JobItem
 		if err := json.Unmarshal([]byte(itemJSON), &item); err != nil {
 			slog.Error("Failed to unmarshal job item", "error", err)
 			continue
 		}
-		job.Items = append(job.Items, item)
+		items = append(items, item)
 	}
 
 	// Sort items by Title to be deterministic
-	sort.Slice(job.Items, func(i, j int) bool {
-		return job.Items[i].Title < job.Items[j].Title
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Title < items[j].Title
 	})
 
-	return &job, nil
+	return items, nil
 }
 
 // GetUserJobs retrieves all jobs for a user
@@ -448,7 +466,7 @@ func (q *Queue) GetUserJobs(ctx context.Context, userID string) ([]*Job, error) 
 
 	var jobs []*Job
 	for _, id := range jobIDs {
-		job, err := q.GetJob(ctx, id)
+		job, err := q.GetJob(ctx, id, false)
 		if err != nil {
 			slog.Error("Failed to fetch job", "job_id", id, "error", err)
 			continue
@@ -569,7 +587,7 @@ func (q *Queue) UpdateJobItem(ctx context.Context, jobID string, item JobItem) e
 func (q *Queue) getJobsFromIDs(ctx context.Context, jobIDs []string) ([]*Job, error) {
 	var jobs []*Job
 	for _, id := range jobIDs {
-		job, err := q.GetJob(ctx, id)
+		job, err := q.GetJob(ctx, id, false)
 		if err != nil {
 			slog.Error("Failed to fetch job", "job_id", id, "error", err)
 			continue
