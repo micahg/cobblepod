@@ -103,8 +103,8 @@ export const backupApi = createApi({
       },
       invalidatesTags: ['Backup', 'Jobs'],
     }),
-    getJobs: builder.query<GetJobsResponse, void>({
-      query: () => '/jobs',
+    getJobs: builder.query<GetJobsResponse, string | void>({
+      query: (status) => status ? `/jobs?status=${status}` : '/jobs',
       providesTags: ['Jobs'],
     }),
     getJobItems: builder.query<GetJobItemsResponse, string>({

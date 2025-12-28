@@ -3,25 +3,15 @@ import { useGetJobsQuery } from '../../services/backupApi';
 import styles from './JobDashboard.module.css';
 
 const JobDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
-  const { data, error, isLoading } = useGetJobsQuery(undefined, {
+  const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
+  
+  const queryStatus = activeTab === 'active' ? undefined : activeTab;
+
+  const { data, error, isLoading } = useGetJobsQuery(queryStatus, {
     pollingInterval: 5000, // Poll every 5 seconds
   });
 
-  if (isLoading) {
-    return <div className={styles.dashboardContainer}>Loading jobs...</div>;
-  }
-
-  if (error) {
-    return <div className={styles.dashboardContainer}>Error loading jobs</div>;
-  }
-
   const jobs = data?.jobs || [];
-
-  const activeJobs = jobs.filter(job => ['waiting', 'running'].includes(job.status.toLowerCase()));
-  const historyJobs = jobs.filter(job => ['completed', 'failed'].includes(job.status.toLowerCase()));
-
-  const displayedJobs = activeTab === 'active' ? activeJobs : historyJobs;
 
   const getStatusClass = (status: string) => {
     switch (status.toLowerCase()) {
@@ -50,21 +40,31 @@ const JobDashboard: React.FC = () => {
           className={`${styles.tabButton} ${activeTab === 'active' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('active')}
         >
-          Active ({activeJobs.length})
+          Active
         </button>
         <button 
-          className={`${styles.tabButton} ${activeTab === 'history' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('history')}
+          className={`${styles.tabButton} ${activeTab === 'completed' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('completed')}
         >
-          History ({historyJobs.length})
+          Completed
+        </button>
+        <button 
+          className={`${styles.tabButton} ${activeTab === 'failed' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('failed')}
+        >
+          Failed
         </button>
       </div>
 
-      {displayedJobs.length === 0 ? (
+      {isLoading ? (
+        <div className={styles.dashboardContainer}>Loading jobs...</div>
+      ) : error ? (
+        <div className={styles.dashboardContainer}>Error loading jobs</div>
+      ) : jobs.length === 0 ? (
         <p>No {activeTab} jobs found.</p>
       ) : (
         <ul className={styles.jobList}>
-          {displayedJobs.map((job) => (
+          {jobs.map((job) => (
             <li key={job.id} className={styles.jobItem}>
               <div className={styles.jobHeader}>
                 <span>ID: {job.id.substring(0, 8)}...</span>
