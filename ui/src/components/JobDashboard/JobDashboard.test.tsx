@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { backupApi, useGetJobsQuery } from '../../services/backupApi';
@@ -43,7 +43,8 @@ describe('JobDashboard', () => {
         <JobDashboard />
       </Provider>
     );
-    expect(screen.getByText(/Loading jobs.../i)).toBeInTheDocument();
+    // In MUI version, we use CircularProgress, so we look for role="progressbar"
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
   it('renders waiting job correctly', () => {
@@ -70,5 +71,62 @@ describe('JobDashboard', () => {
 
     expect(screen.getByText('waiting')).toBeInTheDocument();
     expect(screen.getByText(/ID: job-123/)).toBeInTheDocument();
+  });
+
+  it('displays no active jobs message when list is empty', () => {
+    (useGetJobsQuery as Mock).mockReturnValue({
+      data: { jobs: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobDashboard />
+      </Provider>
+    );
+
+    expect(screen.getByText('No active jobs found.')).toBeInTheDocument();
+  });
+
+  it('displays no completed jobs message when list is empty', () => {
+    (useGetJobsQuery as Mock).mockReturnValue({
+      data: { jobs: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobDashboard />
+      </Provider>
+    );
+
+    const completedTab = screen.getByRole('tab', { name: /completed/i });
+    fireEvent.click(completedTab);
+
+    expect(screen.getByText('No completed jobs found.')).toBeInTheDocument();
+  });
+
+  it('displays no failed jobs message when list is empty', () => {
+    (useGetJobsQuery as Mock).mockReturnValue({
+      data: { jobs: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobDashboard />
+      </Provider>
+    );
+
+    const failedTab = screen.getByRole('tab', { name: /failed/i });
+    fireEvent.click(failedTab);
+
+    expect(screen.getByText('No failed jobs found.')).toBeInTheDocument();
   });
 });

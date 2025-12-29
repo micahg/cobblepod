@@ -1,27 +1,39 @@
 import { useState, useRef } from 'react';
-import styles from './UploadBackupComponent.module.css';
 import { useUploadBackupMutation } from '../../services/backupApi';
+import { 
+  Card, 
+  CardContent, 
+  Typography, 
+  Button, 
+  Box, 
+  Alert, 
+  CircularProgress,
+  Stack
+} from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 
 const UploadBackupComponent = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadBackup, { isLoading, isSuccess, isError, error }] = useUploadBackupMutation();
+  const [uploadBackup, { isLoading }] = useUploadBackupMutation();
+  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       // Validate file extension
       if (!file.name.toLowerCase().endsWith('.backup')) {
-        alert('Please select a .backup file');
+        setUploadMessage({ type: 'error', text: 'Please select a .backup file' });
         return;
       }
       setSelectedFile(file);
+      setUploadMessage(null);
     }
   };
 
   const handleUpload = async () => {
     if (!selectedFile) {
-      alert('Please select a file first');
+      setUploadMessage({ type: 'error', text: 'Please select a file first' });
       return;
     }
 
@@ -31,11 +43,11 @@ const UploadBackupComponent = () => {
       
       if (response.success) {
         const message = response.job_id 
-          ? `File "${selectedFile.name}" uploaded successfully!\nJob ID: ${response.job_id}`
+          ? `File "${selectedFile.name}" uploaded successfully! Job ID: ${response.job_id}`
           : `File "${selectedFile.name}" uploaded successfully!`;
-        alert(message);
+        setUploadMessage({ type: 'success', text: message });
       } else {
-        alert(`Upload failed: ${response.error || 'Unknown error'}`);
+        setUploadMessage({ type: 'error', text: `Upload failed: ${response.error || 'Unknown error'}` });
       }
       
       // Reset form on success
@@ -50,7 +62,7 @@ const UploadBackupComponent = () => {
       const errorMessage = err && typeof err === 'object' && 'data' in err 
         ? (err.data as { error?: string })?.error || 'Unknown error'
         : 'Network error';
-      alert(`Upload failed: ${errorMessage}`);
+      setUploadMessage({ type: 'error', text: `Upload failed: ${errorMessage}` });
     }
   };
 
@@ -59,71 +71,82 @@ const UploadBackupComponent = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    setUploadMessage(null);
   };
 
   return (
-    <div className={styles.uploadBackupComponent}>
-      <h2>Upload Backup File</h2>
-      <p>Select a podcast backup file (.backup) to upload and process.</p>
-      
-      <div className={styles.uploadSection}>
-        <div className={styles.fileInputSection}>
-          <label htmlFor="backup-file-input" className={styles.fileInputLabel}>
-            Select backup file:
-          </label>
-          <input
-            id="backup-file-input"
-            ref={fileInputRef}
-            type="file"
-            accept=".backup"
-            onChange={handleFileSelect}
-            disabled={isLoading}
-            required
-            className={styles.fileInput}
-          />
+    <Card sx={{ minWidth: 300, maxWidth: 600, width: '100%', maxHeight: 600, overflow: 'auto' }}>
+      <CardContent>
+        <Typography variant="h5" component="div" gutterBottom>
+          Upload Backup File
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Select a podcast backup file (.backup) to upload and process.
+        </Typography>
+        
+        <Stack spacing={2}>
+          <Box>
+            <input
+              accept=".backup"
+              style={{ display: 'none' }}
+              id="raised-button-file"
+              type="file"
+              onChange={handleFileSelect}
+              ref={fileInputRef}
+              disabled={isLoading}
+              required
+            />
+            <label htmlFor="raised-button-file">
+              <Button 
+                variant="outlined" 
+                component="span" 
+                startIcon={<CloudUploadIcon />}
+                fullWidth
+                disabled={isLoading}
+              >
+                Select File
+              </Button>
+            </label>
+          </Box>
           
           {selectedFile && (
-            <div className={styles.fileInfo}>
-              <p><strong>Selected file:</strong> {selectedFile.name}</p>
-              <p><strong>Size:</strong> {(selectedFile.size / 1024).toFixed(2)} KB</p>
-              <p><strong>Type:</strong> {selectedFile.type || 'Unknown'}</p>
-            </div>
+            <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+              <Typography variant="body2"><strong>Selected file:</strong> {selectedFile.name}</Typography>
+              <Typography variant="body2"><strong>Size:</strong> {(selectedFile.size / 1024).toFixed(2)} KB</Typography>
+              <Typography variant="body2"><strong>Type:</strong> {selectedFile.type || 'Unknown'}</Typography>
+            </Box>
           )}
 
-          {isSuccess && (
-            <div className={styles.successMessage}>
-              Upload completed successfully!
-            </div>
+          {uploadMessage && (
+            <Alert severity={uploadMessage.type} onClose={() => setUploadMessage(null)}>
+              {uploadMessage.text}
+            </Alert>
           )}
 
-          {isError && (
-            <div className={styles.errorMessage}>
-              Upload failed: {error && 'message' in error ? error.message : 'Unknown error'}
-            </div>
-          )}
-        </div>
-
-        <div className={styles.buttonSection}>
-          <button
-            onClick={handleUpload}
-            disabled={!selectedFile || isLoading}
-            className={styles.uploadButton}
-          >
-            {isLoading ? 'Uploading...' : 'Upload File'}
-          </button>
-          
-          {selectedFile && !isLoading && (
-            <button
-              onClick={handleClear}
-              className={styles.clearButton}
+          <Stack direction="row" spacing={2}>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleUpload}
+              disabled={!selectedFile || isLoading}
+              fullWidth
             >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-    </div>
+              {isLoading ? <CircularProgress size={24} /> : 'Upload'}
+            </Button>
+            {selectedFile && !isLoading && (
+              <Button 
+                variant="outlined" 
+                color="secondary" 
+                onClick={handleClear}
+                fullWidth
+              >
+                Clear
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 };
 
