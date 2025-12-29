@@ -7,6 +7,7 @@ import { setTokenGetter } from './services/backupApi'
 
 // Lazy load the UploadBackupComponent
 const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
+const JobDashboard = lazy(() => import('./components/JobDashboard/JobDashboard'))
 
 function AppContent() {
   const { getToken } = useAuthToken()
@@ -37,10 +38,17 @@ function AppContent() {
     <>
       <h1>Cobblepod Dashboard</h1>
 
-      {/* Upload Backup Component */}
-      <Suspense fallback={<div>Loading upload component...</div>}>
-        <UploadBackupComponent />
-      </Suspense>
+      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', justifyContent: 'center' }}>
+        {/* Upload Backup Component */}
+        <Suspense fallback={<div>Loading upload component...</div>}>
+          <UploadBackupComponent />
+        </Suspense>
+
+        {/* Job Dashboard Component */}
+        <Suspense fallback={<div>Loading dashboard...</div>}>
+          <JobDashboard />
+        </Suspense>
+      </div>
       
       <div style={{ marginTop: '20px' }}>
         <LogoutButton />

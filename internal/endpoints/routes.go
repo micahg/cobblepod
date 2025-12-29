@@ -38,6 +38,7 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 		jobs.Use(Auth0Middleware())
 		{
 			jobs.GET("", HandleGetJobs(jobQueue))
+			jobs.GET("/:id/items", HandleGetJobItems(jobQueue))
 		}
 	}
 }

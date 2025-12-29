@@ -40,6 +40,11 @@ func (m *MockJobQueue) GetCompletedJobs(ctx context.Context, userID string) ([]*
 	return args.Get(0).([]*queue.Job), args.Error(1)
 }
 
+func (m *MockJobQueue) GetJobItems(ctx context.Context, jobID string) ([]queue.JobItem, error) {
+	args := m.Called(ctx, jobID)
+	return args.Get(0).([]queue.JobItem), args.Error(1)
+}
+
 func TestHandleGetJobs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
