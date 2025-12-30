@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
+import { Box, CircularProgress, Typography, Alert, Container } from '@mui/material';
 import type { ReactNode } from 'react';
 import LoginButton from './LoginButton';
 
@@ -12,47 +13,59 @@ const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
 
   if (isLoading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '200px' 
-      }}>
-        <div>Loading authentication...</div>
-      </div>
+      <Box 
+        display="flex" 
+        justifyContent="center" 
+        alignItems="center" 
+        minHeight="200px"
+      >
+        <CircularProgress />
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div style={{ 
-        padding: '20px', 
-        backgroundColor: '#f8d7da', 
-        color: '#721c24',
-        borderRadius: '4px',
-        margin: '20px'
-      }}>
-        <h3>Authentication Error</h3>
-        <p>{error.message}</p>
-        <LoginButton />
-      </div>
+      <Container maxWidth="sm" sx={{ mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="h6">Authentication Error</Typography>
+          <Typography variant="body2">{error.message}</Typography>
+        </Alert>
+        <Box display="flex" justifyContent="center">
+          <LoginButton />
+        </Box>
+      </Container>
     );
   }
 
   if (!isAuthenticated) {
     return fallback || (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '400px',
-        gap: '20px'
-      }}>
-        <h2>Welcome to Cobblepod</h2>
-        <p>Please sign in to continue</p>
-        <LoginButton />
-      </div>
+      <Container 
+        // maxWidth="sm" 
+        sx={{ 
+          display: 'flex', 
+          flexDirection: 'row', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          minHeight: '100vh', 
+          minWidth: '100vw'
+        }}
+      >
+        <Box 
+          display="flex" 
+          flexDirection="column"
+          alignItems="center" 
+          gap={3}
+        >
+          <Typography variant="h4" component="h2" gutterBottom align="center">
+            Welcome to Cobblepod
+          </Typography>
+          <Typography variant="body1" color="text.secondary" gutterBottom align="center">
+            Please sign in to continue
+          </Typography>
+          <LoginButton />
+        </Box>
+      </Container>
     );
   }
 

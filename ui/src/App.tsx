@@ -35,8 +35,18 @@ function AppContent() {
   }, [getToken])
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ my: 4, textAlign: 'center' }}>
+    <Container 
+      maxWidth="lg"
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        minHeight: '100vh', 
+        minWidth: '100vw'
+      }}
+    >
+      <Box sx={{ my: 4, textAlign: 'center', width: '100%' }}>
         <Typography variant="h3" component="h1" gutterBottom>
           Cobblepod Dashboard
         </Typography>
