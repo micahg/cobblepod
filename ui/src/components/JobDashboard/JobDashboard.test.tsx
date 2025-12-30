@@ -69,8 +69,8 @@ describe('JobDashboard', () => {
       </Provider>
     );
 
-    expect(screen.getByText('waiting')).toBeInTheDocument();
     expect(screen.getByText(/ID: job-123/)).toBeInTheDocument();
+    expect(screen.getByLabelText('info')).toBeInTheDocument();
   });
 
   it('displays no active jobs message when list is empty', () => {
