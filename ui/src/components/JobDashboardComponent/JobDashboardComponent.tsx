@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 
-const JobDashboard = () => {
+const JobDashboardComponent = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
   
   const queryStatus = activeTab === 'active' ? undefined : activeTab;
@@ -110,4 +110,4 @@ const JobDashboard = () => {
   );
 };
 
-export default JobDashboard;
+export default JobDashboardComponent;

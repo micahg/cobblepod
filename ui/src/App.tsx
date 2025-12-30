@@ -7,7 +7,7 @@ import { Container, Typography, Box, CircularProgress, CssBaseline, Stack } from
 
 // Lazy load the UploadBackupComponent
 const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
-const JobDashboard = lazy(() => import('./components/JobDashboard/JobDashboard'))
+const JobDashboardComponent = lazy(() => import('./components/JobDashboardComponent/JobDashboardComponent'))
 
 function AppContent() {
   const { getToken } = useAuthToken()
@@ -65,7 +65,7 @@ function AppContent() {
 
           {/* Job Dashboard Component */}
           <Suspense fallback={<CircularProgress />}>
-            <JobDashboard />
+            <JobDashboardComponent />
           </Suspense>
         </Stack>
         

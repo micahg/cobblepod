@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { backupApi, useGetJobsQuery } from '../../services/backupApi';
-import JobDashboard from './JobDashboard';
+import JobDashboardComponent from './JobDashboardComponent';
 import { vi, Mock } from 'vitest';
 import React from 'react';
 
@@ -40,7 +40,7 @@ describe('JobDashboard', () => {
     const store = createTestStore();
     render(
       <Provider store={store}>
-        <JobDashboard />
+        <JobDashboardComponent />
       </Provider>
     );
     // In MUI version, we use CircularProgress, so we look for role="progressbar"
@@ -65,7 +65,7 @@ describe('JobDashboard', () => {
     const store = createTestStore();
     render(
       <Provider store={store}>
-        <JobDashboard />
+        <JobDashboardComponent />
       </Provider>
     );
 
@@ -83,7 +83,7 @@ describe('JobDashboard', () => {
     const store = createTestStore();
     render(
       <Provider store={store}>
-        <JobDashboard />
+        <JobDashboardComponent />
       </Provider>
     );
 
@@ -100,7 +100,7 @@ describe('JobDashboard', () => {
     const store = createTestStore();
     render(
       <Provider store={store}>
-        <JobDashboard />
+        <JobDashboardComponent />
       </Provider>
     );
 
@@ -120,7 +120,7 @@ describe('JobDashboard', () => {
     const store = createTestStore();
     render(
       <Provider store={store}>
-        <JobDashboard />
+        <JobDashboardComponent />
       </Provider>
     );
 
