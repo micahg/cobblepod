@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
 import { useGetJobsQuery } from '../../services/backupApi';
-import styles from './JobDashboard.module.css';
+import {
+  Card,
+  CardContent,
+  Typography,
+  Tabs,
+  Tab,
+  List,
+  ListItem,
+  ListItemText,
+  Chip,
+  Box,
+  CircularProgress,
+  Alert,
+  Divider
+} from '@mui/material';
 
 const JobDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
@@ -13,18 +27,18 @@ const JobDashboard: React.FC = () => {
 
   const jobs = data?.jobs || [];
 
-  const getStatusClass = (status: string) => {
+  const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'waiting':
-        return styles['status-waiting'];
+        return 'warning';
       case 'running':
-        return styles['status-running'];
+        return 'info';
       case 'completed':
-        return styles['status-completed'];
+        return 'success';
       case 'failed':
-        return styles['status-failed'];
+        return 'error';
       default:
-        return '';
+        return 'default';
     }
   };
 
@@ -32,54 +46,81 @@ const JobDashboard: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
-  return (
-    <div className={styles.dashboardContainer}>
-      <h2>Job Status</h2>
-      <div className={styles.tabs}>
-        <button 
-          className={`${styles.tabButton} ${activeTab === 'active' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('active')}
-        >
-          Active
-        </button>
-        <button 
-          className={`${styles.tabButton} ${activeTab === 'completed' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('completed')}
-        >
-          Completed
-        </button>
-        <button 
-          className={`${styles.tabButton} ${activeTab === 'failed' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('failed')}
-        >
-          Failed
-        </button>
-      </div>
+  const handleTabChange = (event: React.SyntheticEvent, newValue: 'active' | 'completed' | 'failed') => {
+    setActiveTab(newValue);
+  };
 
-      {isLoading ? (
-        <div className={styles.dashboardContainer}>Loading jobs...</div>
-      ) : error ? (
-        <div className={styles.dashboardContainer}>Error loading jobs</div>
-      ) : jobs.length === 0 ? (
-        <p>No {activeTab} jobs found.</p>
-      ) : (
-        <ul className={styles.jobList}>
-          {jobs.map((job) => (
-            <li key={job.id} className={styles.jobItem}>
-              <div className={styles.jobHeader}>
-                <span>ID: {job.id.substring(0, 8)}...</span>
-                <span className={`${styles.jobStatus} ${getStatusClass(job.status)}`}>
-                  {job.status}
-                </span>
-              </div>
-              <div className={styles.jobTime}>
-                Created: {formatDate(job.created_at)}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+  return (
+    <Card sx={{ 
+      minWidth: 300, 
+      maxWidth: 600, 
+      width: '100%', 
+      maxHeight: { xs: '50vh', md: 'min(600px, 80vh)' }, // we are stacked vertically with other components on xs
+      display: 'flex', 
+      flexDirection: 'column' 
+    }}>
+      <CardContent sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        <Typography variant="h5" component="div" gutterBottom>
+          Job Status
+        </Typography>
+        
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs value={activeTab} onChange={handleTabChange} aria-label="job status tabs">
+            <Tab label="Active" value="active" />
+            <Tab label="Completed" value="completed" />
+            <Tab label="Failed" value="failed" />
+          </Tabs>
+        </Box>
+
+        <Box sx={{ overflow: 'auto', flex: 1 }}>
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Alert severity="error">Error loading jobs</Alert>
+          ) : jobs.length === 0 ? (
+            <Typography variant="body1" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+              No {activeTab} jobs found.
+            </Typography>
+          ) : (
+            <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+              {jobs.map((job, index) => (
+                <React.Fragment key={job.id}>
+                  <ListItem alignItems="flex-start">
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle1" component="span">
+                            ID: {job.id.substring(0, 8)}...
+                          </Typography>
+                          <Chip 
+                            label={job.status} 
+                            color={getStatusColor(job.status) as any} 
+                            size="small" 
+                          />
+                        </Box>
+                      }
+                      secondary={
+                        <Typography
+                          sx={{ display: 'inline' }}
+                          component="span"
+                          variant="body2"
+                          color="text.primary"
+                        >
+                          Created: {formatDate(job.created_at)}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                  {index < jobs.length - 1 && <Divider variant="inset" component="li" />}
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
   );
 };
 

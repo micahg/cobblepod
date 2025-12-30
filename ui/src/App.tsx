@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
-import './App.css'
 import { AuthGuard, LogoutButton, useAuthToken } from './auth'
 import { setTokenGetter } from './services/backupApi'
+import { Container, Typography, Box, CircularProgress, CssBaseline, Stack } from '@mui/material'
 
 // Lazy load the UploadBackupComponent
 const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
@@ -35,31 +35,52 @@ function AppContent() {
   }, [getToken])
 
   return (
-    <>
-      <h1>Cobblepod Dashboard</h1>
+    <Container 
+      maxWidth="lg"
+      sx={{ 
+        display: 'flex', 
+        flexDirection: 'row', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        minHeight: '100vh', 
+        minWidth: '100vw'
+      }}
+    >
+      <Box sx={{ my: 4, textAlign: 'center', width: '100%' }}>
+        <Typography variant="h3" component="h1" gutterBottom>
+          Cobblepod Dashboard
+        </Typography>
 
-      <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', justifyContent: 'center' }}>
-        {/* Upload Backup Component */}
-        <Suspense fallback={<div>Loading upload component...</div>}>
-          <UploadBackupComponent />
-        </Suspense>
+        <Stack 
+          direction={{ xs: 'column', md: 'row' }} 
+          spacing={4} 
+          justifyContent="center" 
+          alignItems="flex-start"
+          sx={{ mt: 4 }}
+        >
+          {/* Upload Backup Component */}
+          <Suspense fallback={<CircularProgress />}>
+            <UploadBackupComponent />
+          </Suspense>
 
-        {/* Job Dashboard Component */}
-        <Suspense fallback={<div>Loading dashboard...</div>}>
-          <JobDashboard />
-        </Suspense>
-      </div>
-      
-      <div style={{ marginTop: '20px' }}>
-        <LogoutButton />
-      </div>
-    </>
+          {/* Job Dashboard Component */}
+          <Suspense fallback={<CircularProgress />}>
+            <JobDashboard />
+          </Suspense>
+        </Stack>
+        
+        <Box sx={{ mt: 4 }}>
+          <LogoutButton />
+        </Box>
+      </Box>
+    </Container>
   )
 }
 
 function App() {
   return (
     <Provider store={store}>
+      <CssBaseline />
       <AuthGuard>
         <AppContent />
       </AuthGuard>
