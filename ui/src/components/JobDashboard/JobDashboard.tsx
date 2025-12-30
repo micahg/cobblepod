@@ -51,8 +51,15 @@ const JobDashboard: React.FC = () => {
   };
 
   return (
-    <Card sx={{ minWidth: 300, maxWidth: 600, width: '100%', maxHeight: 600, overflow: 'auto' }}>
-      <CardContent>
+    <Card sx={{ 
+      minWidth: 300, 
+      maxWidth: 600, 
+      width: '100%', 
+      maxHeight: { xs: '50vh', md: 'min(600px, 80vh)' }, // we are stacked vertically with other components on xs
+      display: 'flex', 
+      flexDirection: 'column' 
+    }}>
+      <CardContent sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
         <Typography variant="h5" component="div" gutterBottom>
           Job Status
         </Typography>
@@ -65,51 +72,53 @@ const JobDashboard: React.FC = () => {
           </Tabs>
         </Box>
 
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : error ? (
-          <Alert severity="error">Error loading jobs</Alert>
-        ) : jobs.length === 0 ? (
-          <Typography variant="body1" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-            No {activeTab} jobs found.
-          </Typography>
-        ) : (
-          <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
-            {jobs.map((job, index) => (
-              <React.Fragment key={job.id}>
-                <ListItem alignItems="flex-start">
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="subtitle1" component="span">
-                          ID: {job.id.substring(0, 8)}...
+        <Box sx={{ overflow: 'auto', flex: 1 }}>
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : error ? (
+            <Alert severity="error">Error loading jobs</Alert>
+          ) : jobs.length === 0 ? (
+            <Typography variant="body1" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+              No {activeTab} jobs found.
+            </Typography>
+          ) : (
+            <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+              {jobs.map((job, index) => (
+                <React.Fragment key={job.id}>
+                  <ListItem alignItems="flex-start">
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="subtitle1" component="span">
+                            ID: {job.id.substring(0, 8)}...
+                          </Typography>
+                          <Chip 
+                            label={job.status} 
+                            color={getStatusColor(job.status) as any} 
+                            size="small" 
+                          />
+                        </Box>
+                      }
+                      secondary={
+                        <Typography
+                          sx={{ display: 'inline' }}
+                          component="span"
+                          variant="body2"
+                          color="text.primary"
+                        >
+                          Created: {formatDate(job.created_at)}
                         </Typography>
-                        <Chip 
-                          label={job.status} 
-                          color={getStatusColor(job.status) as any} 
-                          size="small" 
-                        />
-                      </Box>
-                    }
-                    secondary={
-                      <Typography
-                        sx={{ display: 'inline' }}
-                        component="span"
-                        variant="body2"
-                        color="text.primary"
-                      >
-                        Created: {formatDate(job.created_at)}
-                      </Typography>
-                    }
-                  />
-                </ListItem>
-                {index < jobs.length - 1 && <Divider variant="inset" component="li" />}
-              </React.Fragment>
-            ))}
-          </List>
-        )}
+                      }
+                    />
+                  </ListItem>
+                  {index < jobs.length - 1 && <Divider variant="inset" component="li" />}
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Box>
       </CardContent>
     </Card>
   );
