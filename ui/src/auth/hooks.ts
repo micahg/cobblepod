@@ -5,7 +5,6 @@ export const useAuthToken = () => {
   const { getAccessTokenSilently, isAuthenticated, logout } = useAuth0();
 
   const getToken = async (): Promise<string | null> => {
-    console.log('getToken called, isAuthenticated:', isAuthenticated);
     
     if (!isAuthenticated) {
       console.warn('User is not authenticated');
@@ -20,7 +19,6 @@ export const useAuthToken = () => {
           audience: config.audience,
         },
       });
-      console.log('Token retrieved successfully');
       return token;
     } catch (error) {
       console.error('Error getting access token, logging out:', error);

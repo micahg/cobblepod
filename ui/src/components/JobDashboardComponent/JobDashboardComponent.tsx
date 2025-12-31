@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { type SyntheticEvent, Fragment, useState } from 'react';
 import { useGetJobsQuery } from '../../services/backupApi';
 import {
   Card,
@@ -9,15 +9,18 @@ import {
   List,
   ListItem,
   ListItemText,
-  Chip,
   Box,
   CircularProgress,
   Alert,
-  Divider
+  Divider,
+  IconButton
 } from '@mui/material';
+import InfoIcon from '@mui/icons-material/Info';
+import JobItemsComponent from '../JobItemsComponent/JobItemsComponent';
 
-const JobDashboard: React.FC = () => {
+const JobDashboardComponent = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   
   const queryStatus = activeTab === 'active' ? undefined : activeTab;
 
@@ -27,27 +30,21 @@ const JobDashboard: React.FC = () => {
 
   const jobs = data?.jobs || [];
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'waiting':
-        return 'warning';
-      case 'running':
-        return 'info';
-      case 'completed':
-        return 'success';
-      case 'failed':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: 'active' | 'completed' | 'failed') => {
+  const handleTabChange = (_event: SyntheticEvent, newValue: 'active' | 'completed' | 'failed') => {
     setActiveTab(newValue);
+  };
+
+  const handleOpenJobDetails = (jobId: string) => {
+    console.log('Opening job details for job ID:', jobId);
+    setSelectedJobId(jobId);
+  };
+
+  const handleCloseJobDetails = () => {
+    setSelectedJobId(null);
   };
 
   return (
@@ -86,20 +83,24 @@ const JobDashboard: React.FC = () => {
           ) : (
             <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
               {jobs.map((job, index) => (
-                <React.Fragment key={job.id}>
-                  <ListItem alignItems="flex-start">
+                <Fragment key={job.id}>
+                  <ListItem
+                    alignItems="flex-start"
+                    secondaryAction={
+                      <IconButton 
+                        edge="end" 
+                        aria-label="info"
+                        onClick={() => handleOpenJobDetails(job.id)}
+                      >
+                        <InfoIcon />
+                      </IconButton>
+                    }
+                  >
                     <ListItemText
                       primary={
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="subtitle1" component="span">
-                            ID: {job.id.substring(0, 8)}...
-                          </Typography>
-                          <Chip 
-                            label={job.status} 
-                            color={getStatusColor(job.status) as any} 
-                            size="small" 
-                          />
-                        </Box>
+                        <Typography variant="subtitle1" component="span">
+                          ID: {job.id.substring(0, 8)}...
+                        </Typography>
                       }
                       secondary={
                         <Typography
@@ -114,14 +115,19 @@ const JobDashboard: React.FC = () => {
                     />
                   </ListItem>
                   {index < jobs.length - 1 && <Divider variant="inset" component="li" />}
-                </React.Fragment>
+                </Fragment>
               ))}
             </List>
           )}
         </Box>
       </CardContent>
+      <JobItemsComponent 
+        jobId={selectedJobId} 
+        open={!!selectedJobId} 
+        onClose={handleCloseJobDetails} 
+      />
     </Card>
   );
 };
 
-export default JobDashboard;
+export default JobDashboardComponent;

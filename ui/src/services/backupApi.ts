@@ -74,7 +74,6 @@ export const backupApi = createApi({
         try {
           const token = await tokenGetter();
           if (token) {
-            console.log('Auth token retrieved successfully');
             headers.set('Authorization', `Bearer ${token}`);
           } else {
             console.warn('Auth token is null - user may not be authenticated');
