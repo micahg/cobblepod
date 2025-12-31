@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { backupApi, useGetJobsQuery } from '../../services/backupApi';
+import { backupApi, useGetJobsQuery, useGetJobItemsQuery } from '../../services/backupApi';
 import JobDashboardComponent from './JobDashboardComponent';
 import { vi, Mock } from 'vitest';
 import React from 'react';
@@ -12,6 +12,7 @@ vi.mock('../../services/backupApi', async () => {
   return {
     ...actual,
     useGetJobsQuery: vi.fn(),
+    useGetJobItemsQuery: vi.fn(),
   };
 });
 
@@ -28,6 +29,11 @@ const createTestStore = () =>
 describe('JobDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: undefined,
+    });
   });
 
   it('renders loading state initially', () => {
@@ -128,5 +134,41 @@ describe('JobDashboard', () => {
     fireEvent.click(failedTab);
 
     expect(screen.getByText('No failed jobs found.')).toBeInTheDocument();
+  });
+
+  it('opens job details when info button is clicked', () => {
+    const mockJob = {
+      id: 'job-123',
+      file_id: 'file-123',
+      created_at: new Date().toISOString(),
+      status: 'waiting',
+      items: []
+    };
+
+    (useGetJobsQuery as Mock).mockReturnValue({
+      data: { jobs: [mockJob] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobDashboardComponent />
+      </Provider>
+    );
+
+    const infoButton = screen.getByLabelText('info');
+    fireEvent.click(infoButton);
+
+    expect(screen.getByText(/Job Details/)).toBeInTheDocument();
+    // Check that the job ID is displayed in the dialog title
+    expect(screen.getByText(/Job Details.*job-123/)).toBeInTheDocument();
   });
 });

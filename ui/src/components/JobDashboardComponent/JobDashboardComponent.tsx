@@ -16,9 +16,11 @@ import {
   IconButton
 } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
+import JobItemsComponent from '../JobItemsComponent/JobItemsComponent';
 
 const JobDashboardComponent = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   
   const queryStatus = activeTab === 'active' ? undefined : activeTab;
 
@@ -34,6 +36,15 @@ const JobDashboardComponent = () => {
 
   const handleTabChange = (_event: SyntheticEvent, newValue: 'active' | 'completed' | 'failed') => {
     setActiveTab(newValue);
+  };
+
+  const handleOpenJobDetails = (jobId: string) => {
+    console.log('Opening job details for job ID:', jobId);
+    setSelectedJobId(jobId);
+  };
+
+  const handleCloseJobDetails = () => {
+    setSelectedJobId(null);
   };
 
   return (
@@ -76,7 +87,11 @@ const JobDashboardComponent = () => {
                   <ListItem
                     alignItems="flex-start"
                     secondaryAction={
-                      <IconButton edge="end" aria-label="info">
+                      <IconButton 
+                        edge="end" 
+                        aria-label="info"
+                        onClick={() => handleOpenJobDetails(job.id)}
+                      >
                         <InfoIcon />
                       </IconButton>
                     }
@@ -106,6 +121,11 @@ const JobDashboardComponent = () => {
           )}
         </Box>
       </CardContent>
+      <JobItemsComponent 
+        jobId={selectedJobId} 
+        open={!!selectedJobId} 
+        onClose={handleCloseJobDetails} 
+      />
     </Card>
   );
 };
