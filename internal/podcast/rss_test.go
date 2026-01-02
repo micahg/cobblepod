@@ -1,6 +1,7 @@
 package podcast
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -156,7 +157,7 @@ func TestCanReuseEpisode(t *testing.T) {
 			processor := NewRSSProcessor("Test Channel", mockStorage)
 
 			// Test CanReuseEpisode
-			result := processor.CanReuseEpisode(tt.newEpisode, tt.existingEpisode, tt.speed)
+			result := processor.CanReuseEpisode(context.Background(), tt.newEpisode, tt.existingEpisode, tt.speed)
 
 			// Verify result
 			if result != tt.expectedResult {

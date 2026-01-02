@@ -306,3 +306,18 @@ func (m *MockQueueWithErrors) QueueLength(ctx context.Context) (int64, error) {
 	}
 	return m.MockQueue.QueueLength(ctx)
 }
+
+func (m *MockQueue) CancelJob(ctx context.Context, jobID string, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Simple mock implementation: just return nil
+	return nil
+}
+
+func (m *MockQueue) SubscribeToCancellations(ctx context.Context) <-chan string {
+	return make(chan string)
+}
+
+func (m *MockQueueWithErrors) CancelJob(ctx context.Context, jobID string, userID string) error {
+	return m.MockQueue.CancelJob(ctx, jobID, userID)
+}

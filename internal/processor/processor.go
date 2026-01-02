@@ -29,7 +29,7 @@ type Task struct {
 // StorageDeleter interface for dependency injection
 type StorageDeleter interface {
 	ExtractFileIDFromURL(url string) string
-	DeleteFile(fileID string) error
+	DeleteFile(ctx context.Context, fileID string) error
 }
 
 // JobTracker interface for tracking job progress
@@ -129,10 +129,10 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	}
 
 	// Get RSS feed and extract episode mapping
-	rssFileID := podcastProcessor.GetRSSFeedID()
+	rssFileID := podcastProcessor.GetRSSFeedID(ctx)
 	episodeMapping := make(map[string]podcast.ExistingEpisode)
 	if rssFileID != "" {
-		rssContent, err := userStorage.DownloadFile(rssFileID)
+		rssContent, err := userStorage.DownloadFile(ctx, rssFileID)
 		if err != nil {
 			slog.Error("Error downloading RSS feed", "error", err)
 		} else {
@@ -215,7 +215,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	}
 
 	// Delete unused episodes from storage backend
-	p.deleteUnusedEpisodes(userStorage, episodeMapping, reused)
+	p.deleteUnusedEpisodes(ctx, userStorage, episodeMapping, reused)
 
 	return nil
 }
@@ -239,7 +239,7 @@ func downloadWorker(ctx context.Context, processor *audio.Processor, tasks <-cha
 			slog.Error("Failed to update job item status", "error", err)
 		}
 
-		tempPath, err := processor.DownloadFile(task.Item.SourceURL)
+		tempPath, err := processor.DownloadFile(ctx, task.Item.SourceURL)
 		task.TempPath = tempPath
 		task.Err = err
 
@@ -280,7 +280,7 @@ func ffmpegWorker(ctx context.Context, processor *audio.Processor, tasks <-chan 
 		}
 
 		slog.Info("Processing audio", "title", task.Item.Title, "speed", speed)
-		outputPath, err := processor.ProcessAudio(task.TempPath, speed, task.Item.Offset)
+		outputPath, err := processor.ProcessAudio(ctx, task.TempPath, speed, task.Item.Offset)
 		if err != nil {
 			slog.Error("Error processing audio", "title", task.Item.Title, "error", err)
 			task.Err = err
@@ -353,7 +353,7 @@ func uploadResults(ctx context.Context, storageService storage.Storage, tasks []
 		tempFile := result.TempFile
 		filename := fmt.Sprintf("%s.mp3", result.Title)
 
-		fileID, err := storageService.UploadFile(tempFile, filename, "audio/mpeg")
+		fileID, err := storageService.UploadFile(ctx, tempFile, filename, "audio/mpeg")
 		if err != nil {
 			task.Item.Status = queue.StatusFailed
 			task.Item.Error = err.Error()
@@ -381,10 +381,10 @@ func uploadResults(ctx context.Context, storageService storage.Storage, tasks []
 }
 
 // updateFeed creates and uploads the RSS XML feed and saves the application state
-func updateFeed(podcastProcessor *podcast.RSSProcessor, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
+func updateFeed(ctx context.Context, podcastProcessor *podcast.RSSProcessor, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
 	// Create and upload RSS XML
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
-	rssFileID, err := storageService.UploadString(xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID())
+	rssFileID, err := storageService.UploadString(ctx, xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID(ctx))
 	if err != nil {
 		return fmt.Errorf("failed to upload RSS feed: %w", err)
 	}
@@ -396,7 +396,7 @@ func updateFeed(podcastProcessor *podcast.RSSProcessor, storageService storage.S
 }
 
 // deleteUnusedEpisodes removes episodes from storage backend that are no longer in the current playlist
-func (p *Processor) deleteUnusedEpisodes(storageService StorageDeleter, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
+func (p *Processor) deleteUnusedEpisodes(ctx context.Context, storageService StorageDeleter, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode) {
 	// Delete episodes that are not reused
 	for title, episode := range episodeMapping {
 		if _, ok := reused[title]; ok {
@@ -408,7 +408,7 @@ func (p *Processor) deleteUnusedEpisodes(storageService StorageDeleter, episodeM
 			continue
 		}
 		slog.Info("Deleting unused episode from storage backend", "title", title, "file_id", fileId)
-		if err := storageService.DeleteFile(fileId); err != nil {
+		if err := storageService.DeleteFile(ctx, fileId); err != nil {
 			slog.Error("Failed to delete file from storage backend", "file_id", fileId, "error", err)
 		}
 	}
@@ -433,7 +433,7 @@ func (p *Processor) processEntries(ctx context.Context, episodeMapping map[strin
 
 		// Reuse check
 		if oldEp, exists := episodeMapping[title]; exists {
-			if podcastProcessor.CanReuseEpisode(item, oldEp, speed) {
+			if podcastProcessor.CanReuseEpisode(ctx, item, oldEp, speed) {
 				slog.Info("Reusing existing processed file", "title", title)
 				reused[title] = oldEp
 				result := podcast.ProcessedEpisode{
@@ -530,7 +530,7 @@ func (p *Processor) processEntries(ctx context.Context, episodeMapping map[strin
 	}
 
 	// Create and upload RSS XML feed and save state
-	if err := updateFeed(podcastProcessor, storageService, results); err != nil {
+	if err := updateFeed(ctx, podcastProcessor, storageService, results); err != nil {
 		slog.Error("Failed to update feed", "error", err)
 	}
 

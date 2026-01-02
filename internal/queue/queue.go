@@ -26,7 +26,8 @@ const (
 	WaitingQueue = "cobblepod:waiting"
 	// RunningUsersKey is the Redis hash key for users with running jobs (UserID -> JobID)
 	RunningUsersKey = "cobblepod:running-users"
-	// RunningQueue is the Redis set key for running job IDs
+	// RunningQueue is the Redis set key for running job IDs - a *set* because membership should be
+	// governed by the number of go-routines processing jobs, (rather than a fixed size).
 	RunningQueue = "cobblepod:running"
 	// SuccessSet is the Redis set key for successful job IDs
 	SuccessSet = "cobblepod:success"
@@ -34,6 +35,8 @@ const (
 	FailedSet = "cobblepod:failed"
 	// CleanupSet is the Redis sorted set key for expiration tracking
 	CleanupSet = "cobblepod:cleanup"
+	// CancellationChannel is the Redis channel for job cancellation signals
+	CancellationChannel = "cobblepod:cancellations"
 	// BlockTimeout is how long BRPOP will wait for a job
 	BlockTimeout = 5 * time.Second
 	// JobRetention is how long jobs are kept
@@ -295,6 +298,14 @@ func (q *Queue) StartJob(ctx context.Context, userID string, jobID string) (bool
 	return started, nil
 }
 
+// ReleaseUserLock removes the user from the running set
+func (q *Queue) ReleaseUserLock(ctx context.Context, userID string) error {
+	if q.client == nil {
+		return fmt.Errorf("queue is not connected")
+	}
+	return q.client.HDel(ctx, q.config.RunningUsersKey, userID).Err()
+}
+
 // CompleteJob marks a job as complete and removes user from running set
 func (q *Queue) CompleteJob(ctx context.Context, userID string, jobID string) error {
 	if q.client == nil {
@@ -367,6 +378,9 @@ func (q *Queue) FailJob(ctx context.Context, job *Job, reason string) error {
 
 	// Remove from running queue (if it was there)
 	pipe.SRem(ctx, q.config.RunningQueue, job.ID)
+
+	// Remove from waiting queue (if it was there)
+	pipe.LRem(ctx, q.config.WaitingQueue, 0, job.ID)
 
 	_, err := pipe.Exec(ctx)
 	if err != nil {
@@ -675,4 +689,80 @@ func (q *Queue) GetFailedJobs(ctx context.Context, userID string) ([]*Job, error
 	}
 
 	return q.getJobsFromIDs(ctx, jobIDs)
+}
+
+// CancelJob cancels a job and notifies workers
+func (q *Queue) CancelJob(ctx context.Context, jobID string, userID string) error {
+	if q.client == nil {
+		return fmt.Errorf("queue is not connected")
+	}
+
+	// Check if job exists and belongs to user
+	jobKey := q.jobKey(jobID)
+	storedUserID, err := q.client.HGet(ctx, jobKey, "user_id").Result()
+	if err != nil {
+		if err == redis.Nil {
+			return fmt.Errorf("job not found")
+		}
+		return fmt.Errorf("failed to check job ownership: %w", err)
+	}
+	if storedUserID != userID {
+		return fmt.Errorf("unauthorized: job does not belong to user")
+	}
+
+	// Use FailJob to handle state transition, cleanup, and expiration
+	if err := q.FailJob(ctx, &Job{ID: jobID, UserID: userID}, "Cancelled by user"); err != nil {
+		return fmt.Errorf("failed to mark job as failed: %w", err)
+	}
+
+	// Publish cancellation signal to notify any running workers
+	if err := q.client.Publish(ctx, CancellationChannel, jobID).Err(); err != nil {
+		return fmt.Errorf("failed to publish cancellation: %w", err)
+	}
+
+	slog.Info("Job cancelled", "job_id", jobID, "user_id", userID)
+	return nil
+}
+
+// SubscribeToCancellations returns a channel that receives cancelled job IDs
+func (q *Queue) SubscribeToCancellations(ctx context.Context) <-chan string {
+	ch := make(chan string)
+	if q.client == nil {
+		close(ch)
+		return ch
+	}
+
+	// Create a dedicated client for subscription to avoid blocking the main client
+	// and to adhere to Redis best practices regarding pub/sub connections.
+	// We clone the options from the existing client to ensure we connect to the same server.
+	opts := q.client.Options()
+	subClientOpts := *opts
+	subClient := redis.NewClient(&subClientOpts)
+
+	pubsub := subClient.Subscribe(ctx, CancellationChannel)
+
+	go func() {
+		defer close(ch)
+		defer subClient.Close()
+		defer pubsub.Close()
+
+		chLib := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-chLib:
+				if !ok {
+					return
+				}
+				select {
+				case ch <- msg.Payload:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return ch
 }

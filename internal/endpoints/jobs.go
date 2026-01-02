@@ -16,6 +16,7 @@ type JobQueue interface {
 	GetFailedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	GetCompletedJobs(ctx context.Context, userID string) ([]*queue.Job, error)
 	GetJobItems(ctx context.Context, jobID string) ([]queue.JobItem, error)
+	CancelJob(ctx context.Context, jobID string, userID string) error
 }
 
 // GetJobsResponse represents the response for the jobs endpoint
@@ -128,5 +129,35 @@ func HandleGetJobItems(jobQueue JobQueue) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, GetJobItemsResponse{Items: items})
+	}
+}
+
+// HandleCancelJob returns a handler that cancels a job
+// @Summary      Cancel job
+// @Description  Cancel a specific job
+// @Tags         jobs
+// @Produce      json
+// @Param        id path string true "Job ID"
+// @Success      204  {object}  nil
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /jobs/{id} [delete]
+func HandleCancelJob(jobQueue JobQueue) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		jobID := c.Param("id")
+		ctx := c.Request.Context()
+
+		userID, err := GetUserID(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		if err := jobQueue.CancelJob(ctx, jobID, userID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.Status(http.StatusNoContent)
 	}
 }

@@ -39,6 +39,7 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 		{
 			jobs.GET("", HandleGetJobs(jobQueue))
 			jobs.GET("/:id/items", HandleGetJobItems(jobQueue))
+			jobs.DELETE("/:id", HandleCancelJob(jobQueue))
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	"cobblepod/internal/processor"
 	"cobblepod/internal/queue"
+	"cobblepod/internal/worker"
 )
 
 func main() {
@@ -42,6 +43,18 @@ func main() {
 		slog.Error("Failed to create processor", "error", err)
 		os.Exit(1)
 	}
+
+	// Initialize job manager
+	jobManager := worker.NewManager()
+
+	// Start cancellation listener
+	cancellationChan := jobQueue.SubscribeToCancellations(ctx)
+	go func() {
+		for jobID := range cancellationChan {
+			slog.Info("Received cancellation signal", "job_id", jobID)
+			jobManager.Cancel(jobID)
+		}
+	}()
 
 	// Start cleanup ticker (every hour)
 	cleanupTicker := time.NewTicker(1 * time.Hour)
@@ -99,20 +112,34 @@ func main() {
 
 			// Process the job - use a function to ensure defer runs
 			func() {
+				// Create cancellable context for the job
+				jobCtx, cancelJob := context.WithCancel(ctx)
+				jobManager.Add(job.ID, cancelJob)
+				defer jobManager.Remove(job.ID)
+				defer cancelJob()
+
 				// Always release the user lock when done
 				defer func() {
-					if err := jobQueue.CompleteJob(ctx, job.UserID, job.ID); err != nil {
+					if err := jobQueue.ReleaseUserLock(ctx, job.UserID); err != nil {
 						slog.Error("Failed to release user lock", "error", err, "user_id", job.UserID)
 					}
 				}()
 
 				slog.Info("Processing job", "job_id", job.ID, "user_id", job.UserID, "file_id", job.FileID)
 
-				if err := proc.Run(ctx, job); err != nil {
-					slog.Error("Job processing failed", "error", err, "job_id", job.ID)
-					jobQueue.FailJob(ctx, job, err.Error())
+				if err := proc.Run(jobCtx, job); err != nil {
+					if jobCtx.Err() == context.Canceled {
+						slog.Info("Job execution cancelled", "job_id", job.ID)
+						// Do not call FailJob as CancelJob already handled state
+					} else {
+						slog.Error("Job processing failed", "error", err, "job_id", job.ID)
+						jobQueue.FailJob(ctx, job, err.Error())
+					}
 				} else {
 					slog.Info("Job completed successfully", "job_id", job.ID)
+					if err := jobQueue.CompleteJob(ctx, job.UserID, job.ID); err != nil {
+						slog.Error("Failed to complete job", "error", err, "job_id", job.ID)
+					}
 				}
 			}()
 		}

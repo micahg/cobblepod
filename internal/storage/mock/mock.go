@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"context"
+
 	"google.golang.org/api/drive/v3"
 )
 
@@ -15,7 +17,7 @@ type MockStorage struct {
 	ExtractFileIDFromURLFunc func(url string) string
 
 	// GetFiles mock configuration
-	GetFilesFunc  func(query string, mostRecent bool) ([]*drive.File, error)
+	GetFilesFunc  func(ctx context.Context, query string, mostRecent bool) ([]*drive.File, error)
 	GetFilesError error
 	GetFilesFiles []*drive.File
 
@@ -24,31 +26,31 @@ type MockStorage struct {
 	GetMostRecentFileFile *drive.File
 
 	// FileExists mock configuration
-	FileExistsFunc   func(fileID string) (bool, error)
+	FileExistsFunc   func(ctx context.Context, fileID string) (bool, error)
 	FileExistsResult bool
 	FileExistsError  error
 
 	// DeleteFile mock configuration
-	DeleteFileFunc  func(fileID string) error
+	DeleteFileFunc  func(ctx context.Context, fileID string) error
 	DeleteFileError error
 
 	// DownloadFile mock configuration
-	DownloadFileFunc    func(fileID string) (string, error)
+	DownloadFileFunc    func(ctx context.Context, fileID string) (string, error)
 	DownloadFileContent string
 	DownloadFileError   error
 
 	// DownloadFileToTemp mock configuration
-	DownloadFileToTempFunc  func(fileID string) (string, error)
+	DownloadFileToTempFunc  func(ctx context.Context, fileID string) (string, error)
 	DownloadFileToTempPath  string
 	DownloadFileToTempError error
 
 	// UploadFile mock configuration
-	UploadFileFunc  func(filePath, filename, mimeType string) (string, error)
+	UploadFileFunc  func(ctx context.Context, filePath, filename, mimeType string) (string, error)
 	UploadFileID    string
 	UploadFileError error
 
 	// UploadString mock configuration
-	UploadStringFunc  func(content, filename, mimeType, fileID string) (string, error)
+	UploadStringFunc  func(ctx context.Context, content, filename, mimeType, fileID string) (string, error)
 	UploadStringID    string
 	UploadStringError error
 
@@ -119,13 +121,13 @@ func (m *MockStorage) ExtractFileIDFromURL(url string) string {
 }
 
 // GetFiles implements Storage interface
-func (m *MockStorage) GetFiles(query string, mostRecent bool) ([]*drive.File, error) {
+func (m *MockStorage) GetFiles(ctx context.Context, query string, mostRecent bool) ([]*drive.File, error) {
 	m.GetFilesCalls = append(m.GetFilesCalls, GetFilesCall{
 		Query:      query,
 		MostRecent: mostRecent,
 	})
 	if m.GetFilesFunc != nil {
-		return m.GetFilesFunc(query, mostRecent)
+		return m.GetFilesFunc(ctx, query, mostRecent)
 	}
 	if m.GetFilesError != nil {
 		return nil, m.GetFilesError
@@ -143,56 +145,56 @@ func (m *MockStorage) GetMostRecentFile(files []*drive.File) *drive.File {
 }
 
 // FileExists implements Storage interface
-func (m *MockStorage) FileExists(fileID string) (bool, error) {
+func (m *MockStorage) FileExists(ctx context.Context, fileID string) (bool, error) {
 	m.FileExistsCalls = append(m.FileExistsCalls, fileID)
 	if m.FileExistsFunc != nil {
-		return m.FileExistsFunc(fileID)
+		return m.FileExistsFunc(ctx, fileID)
 	}
 	return m.FileExistsResult, m.FileExistsError
 }
 
 // DeleteFile implements Storage interface
-func (m *MockStorage) DeleteFile(fileID string) error {
+func (m *MockStorage) DeleteFile(ctx context.Context, fileID string) error {
 	m.DeleteFileCalls = append(m.DeleteFileCalls, fileID)
 	if m.DeleteFileFunc != nil {
-		return m.DeleteFileFunc(fileID)
+		return m.DeleteFileFunc(ctx, fileID)
 	}
 	return m.DeleteFileError
 }
 
 // DownloadFile implements Storage interface
-func (m *MockStorage) DownloadFile(fileID string) (string, error) {
+func (m *MockStorage) DownloadFile(ctx context.Context, fileID string) (string, error) {
 	m.DownloadFileCalls = append(m.DownloadFileCalls, fileID)
 	if m.DownloadFileFunc != nil {
-		return m.DownloadFileFunc(fileID)
+		return m.DownloadFileFunc(ctx, fileID)
 	}
 	return m.DownloadFileContent, m.DownloadFileError
 }
 
 // DownloadFileToTemp implements Storage interface
-func (m *MockStorage) DownloadFileToTemp(fileID string) (string, error) {
+func (m *MockStorage) DownloadFileToTemp(ctx context.Context, fileID string) (string, error) {
 	m.DownloadFileToTempCalls = append(m.DownloadFileToTempCalls, fileID)
 	if m.DownloadFileToTempFunc != nil {
-		return m.DownloadFileToTempFunc(fileID)
+		return m.DownloadFileToTempFunc(ctx, fileID)
 	}
 	return m.DownloadFileToTempPath, m.DownloadFileToTempError
 }
 
 // UploadFile implements Storage interface
-func (m *MockStorage) UploadFile(filePath, filename, mimeType string) (string, error) {
+func (m *MockStorage) UploadFile(ctx context.Context, filePath, filename, mimeType string) (string, error) {
 	m.UploadFileCalls = append(m.UploadFileCalls, UploadFileCall{
 		FilePath: filePath,
 		Filename: filename,
 		MimeType: mimeType,
 	})
 	if m.UploadFileFunc != nil {
-		return m.UploadFileFunc(filePath, filename, mimeType)
+		return m.UploadFileFunc(ctx, filePath, filename, mimeType)
 	}
 	return m.UploadFileID, m.UploadFileError
 }
 
 // UploadString implements Storage interface
-func (m *MockStorage) UploadString(content, filename, mimeType, fileID string) (string, error) {
+func (m *MockStorage) UploadString(ctx context.Context, content, filename, mimeType, fileID string) (string, error) {
 	m.UploadStringCalls = append(m.UploadStringCalls, UploadStringCall{
 		Content:  content,
 		Filename: filename,
@@ -200,7 +202,7 @@ func (m *MockStorage) UploadString(content, filename, mimeType, fileID string) (
 		FileID:   fileID,
 	})
 	if m.UploadStringFunc != nil {
-		return m.UploadStringFunc(content, filename, mimeType, fileID)
+		return m.UploadStringFunc(ctx, content, filename, mimeType, fileID)
 	}
 	return m.UploadStringID, m.UploadStringError
 }

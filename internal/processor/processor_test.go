@@ -43,7 +43,7 @@ func (m *MockGDriveService) ExtractFileIDFromURL(url string) string {
 	return ""
 }
 
-func (m *MockGDriveService) DeleteFile(fileID string) error {
+func (m *MockGDriveService) DeleteFile(ctx context.Context, fileID string) error {
 	if m.deleteError != nil {
 		return m.deleteError
 	}
@@ -154,7 +154,7 @@ func TestDeleteUnusedEpisodes(t *testing.T) {
 
 			// Call the actual function using our mock
 			proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
-			proc.deleteUnusedEpisodes(mockService, tt.episodeMapping, tt.reused)
+			proc.deleteUnusedEpisodes(context.Background(), mockService, tt.episodeMapping, tt.reused)
 
 			// Check results
 			deletedFiles := mockService.GetDeletedFiles()
@@ -190,7 +190,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 
 		// This should not panic
 		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
-		proc.deleteUnusedEpisodes(mockService, nil, nil)
+		proc.deleteUnusedEpisodes(context.Background(), mockService, nil, nil)
 
 		deletedFiles := mockService.GetDeletedFiles()
 		if len(deletedFiles) != 0 {
@@ -207,7 +207,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		reused := map[string]podcast.ExistingEpisode{}
 
 		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
-		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
+		proc.deleteUnusedEpisodes(context.Background(), mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()
 		if len(deletedFiles) != 0 {
@@ -227,7 +227,7 @@ func TestDeleteUnusedEpisodesEdgeCases(t *testing.T) {
 		}
 
 		proc := NewProcessorWithDependencies(nil, &auth.MockTokenProvider{}, nil, &MockJobTracker{})
-		proc.deleteUnusedEpisodes(mockService, episodeMapping, reused)
+		proc.deleteUnusedEpisodes(context.Background(), mockService, episodeMapping, reused)
 
 		deletedFiles := mockService.GetDeletedFiles()
 		if len(deletedFiles) != 0 {

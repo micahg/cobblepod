@@ -53,7 +53,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries 
 	}
 
 	query := "name contains 'PodcastAddict' and name contains '.backup' and trashed = false"
-	files, err := p.drive.GetFiles(query, true)
+	files, err := p.drive.GetFiles(ctx, query, true)
 	if err != nil {
 		return nil, fmt.Errorf("querying backup files: %w", err)
 	}
@@ -64,7 +64,7 @@ func (p *PodcastAddictBackup) AddListeningProgress(ctx context.Context, entries 
 	latest := files[0]
 	slog.Info("Found PodcastAddict backup candidate", "name", latest.Name, "modified", latest.ModifiedTime)
 
-	backup, err := p.drive.DownloadFileToTemp(latest.Id)
+	backup, err := p.drive.DownloadFileToTemp(ctx, latest.Id)
 	if err != nil {
 		return nil, fmt.Errorf("downloading backup file: %w", err)
 	}
@@ -100,7 +100,7 @@ func (p *PodcastAddictBackup) Process(ctx context.Context, backupFile *FileInfo)
 
 	slog.Info("Processing PodcastAddict backup", "name", backupFile.FileName, "modified", backupFile.ModifiedTime)
 
-	backup, err := p.drive.DownloadFileToTemp(backupFile.File.Id)
+	backup, err := p.drive.DownloadFileToTemp(ctx, backupFile.File.Id)
 	if err != nil {
 		return nil, fmt.Errorf("downloading backup file: %w", err)
 	}

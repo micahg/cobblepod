@@ -68,8 +68,8 @@ func (s *GDrive) ExtractFileIDFromURL(url string) string {
 }
 
 // GetFiles searches for files matching the given query
-func (s *GDrive) GetFiles(query string, mostRecent bool) ([]*drive.File, error) {
-	call := s.drive.Files.List().Q(query).Fields("files(id, name, modifiedTime)")
+func (s *GDrive) GetFiles(ctx context.Context, query string, mostRecent bool) ([]*drive.File, error) {
+	call := s.drive.Files.List().Q(query).Fields("files(id, name, modifiedTime)").Context(ctx)
 
 	if mostRecent {
 		call = call.OrderBy("modifiedTime desc").PageSize(1)
@@ -113,12 +113,12 @@ func (s *GDrive) GetMostRecentFile(files []*drive.File) *drive.File {
 }
 
 // FileExists checks if a file with the given ID exists on Google Drive
-func (s *GDrive) FileExists(fileID string) (bool, error) {
+func (s *GDrive) FileExists(ctx context.Context, fileID string) (bool, error) {
 	if fileID == "" {
 		return false, fmt.Errorf("file ID is empty")
 	}
 
-	_, err := s.drive.Files.Get(fileID).Fields("id").Do()
+	_, err := s.drive.Files.Get(fileID).Fields("id").Context(ctx).Do()
 	if err != nil {
 		// Check if it's a "not found" error
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "File not found") {
@@ -132,12 +132,12 @@ func (s *GDrive) FileExists(fileID string) (bool, error) {
 }
 
 // DeleteFile deletes a file from Google Drive by ID
-func (s *GDrive) DeleteFile(fileID string) error {
+func (s *GDrive) DeleteFile(ctx context.Context, fileID string) error {
 	if fileID == "" {
 		return fmt.Errorf("file ID is empty")
 	}
 
-	err := s.drive.Files.Delete(fileID).Do()
+	err := s.drive.Files.Delete(fileID).Context(ctx).Do()
 	if err != nil {
 		// Check if it's a "not found" error
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "File not found") {
@@ -150,8 +150,8 @@ func (s *GDrive) DeleteFile(fileID string) error {
 }
 
 // DownloadFile downloads a file and returns its content as a string
-func (s *GDrive) DownloadFile(fileID string) (string, error) {
-	resp, err := s.drive.Files.Get(fileID).Download()
+func (s *GDrive) DownloadFile(ctx context.Context, fileID string) (string, error) {
+	resp, err := s.drive.Files.Get(fileID).Context(ctx).Download()
 	if err != nil {
 		return "", fmt.Errorf("failed to download file %s: %w", fileID, err)
 	}
@@ -167,8 +167,8 @@ func (s *GDrive) DownloadFile(fileID string) (string, error) {
 
 // DownloadFileToTemp downloads a Drive file to a temporary file and returns the local path.
 // Caller is responsible for removing the file when done.
-func (s *GDrive) DownloadFileToTemp(fileID string) (string, error) {
-	resp, err := s.drive.Files.Get(fileID).Download()
+func (s *GDrive) DownloadFileToTemp(ctx context.Context, fileID string) (string, error) {
+	resp, err := s.drive.Files.Get(fileID).Context(ctx).Download()
 	if err != nil {
 		return "", fmt.Errorf("failed to download file %s: %w", fileID, err)
 	}
@@ -188,7 +188,7 @@ func (s *GDrive) DownloadFileToTemp(fileID string) (string, error) {
 }
 
 // UploadFile uploads a file to Google Drive
-func (s *GDrive) UploadFile(filePath, filename, mimeType string) (string, error) {
+func (s *GDrive) UploadFile(ctx context.Context, filePath, filename, mimeType string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
@@ -200,7 +200,7 @@ func (s *GDrive) UploadFile(filePath, filename, mimeType string) (string, error)
 	}
 
 	// Create the file with content
-	createdFile, err := s.drive.Files.Create(fileMetadata).Media(file).Fields("id").Do()
+	createdFile, err := s.drive.Files.Create(fileMetadata).Media(file).Fields("id").Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
@@ -208,7 +208,7 @@ func (s *GDrive) UploadFile(filePath, filename, mimeType string) (string, error)
 	slog.Info("File uploaded successfully", "filename", filename, "id", createdFile.Id)
 
 	// Set permissions
-	if err := s.setFilePermissions(createdFile.Id, filename); err != nil {
+	if err := s.setFilePermissions(ctx, createdFile.Id, filename); err != nil {
 		return "", fmt.Errorf("failed to set permissions: %w", err)
 	}
 
@@ -216,7 +216,7 @@ func (s *GDrive) UploadFile(filePath, filename, mimeType string) (string, error)
 }
 
 // UploadString uploads a string as a file to Google Drive
-func (s *GDrive) UploadString(content, filename, mimeType, fileID string) (string, error) {
+func (s *GDrive) UploadString(ctx context.Context, content, filename, mimeType, fileID string) (string, error) {
 	fileMetadata := &drive.File{
 		Name: filename,
 	}
@@ -228,10 +228,10 @@ func (s *GDrive) UploadString(content, filename, mimeType, fileID string) (strin
 
 	if fileID != "" {
 		// Update existing file
-		file, err = s.drive.Files.Update(fileID, fileMetadata).Media(reader).Fields("id").Do()
+		file, err = s.drive.Files.Update(fileID, fileMetadata).Media(reader).Fields("id").Context(ctx).Do()
 	} else {
 		// Create new file
-		file, err = s.drive.Files.Create(fileMetadata).Media(reader).Fields("id").Do()
+		file, err = s.drive.Files.Create(fileMetadata).Media(reader).Fields("id").Context(ctx).Do()
 	}
 
 	if err != nil {
@@ -239,7 +239,7 @@ func (s *GDrive) UploadString(content, filename, mimeType, fileID string) (strin
 	}
 
 	// Set permissions
-	if err := s.setFilePermissions(file.Id, filename); err != nil {
+	if err := s.setFilePermissions(ctx, file.Id, filename); err != nil {
 		return "", fmt.Errorf("failed to set permissions: %w", err)
 	}
 
@@ -247,13 +247,13 @@ func (s *GDrive) UploadString(content, filename, mimeType, fileID string) (strin
 }
 
 // setFilePermissions sets file permissions to be readable by anyone with the link
-func (s *GDrive) setFilePermissions(fileID, filename string) error {
+func (s *GDrive) setFilePermissions(ctx context.Context, fileID, filename string) error {
 	permission := &drive.Permission{
 		Type: "anyone",
 		Role: "reader",
 	}
 
 	slog.Info("Setting permissions", "filename", filename, "id", fileID)
-	_, err := s.drive.Permissions.Create(fileID, permission).Do()
+	_, err := s.drive.Permissions.Create(fileID, permission).Context(ctx).Do()
 	return err
 }

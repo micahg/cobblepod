@@ -45,6 +45,11 @@ func (m *MockJobQueue) GetJobItems(ctx context.Context, jobID string) ([]queue.J
 	return args.Get(0).([]queue.JobItem), args.Error(1)
 }
 
+func (m *MockJobQueue) CancelJob(ctx context.Context, jobID string, userID string) error {
+	args := m.Called(ctx, jobID, userID)
+	return args.Error(0)
+}
+
 func TestHandleGetJobs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -156,6 +161,60 @@ func TestHandleGetJobs(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/jobs", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		mockQueue.AssertExpectations(t)
+	})
+}
+
+func TestHandleCancelJob(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("Success", func(t *testing.T) {
+		mockQueue := new(MockJobQueue)
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			c.Set("user_id", "test-user")
+			c.Next()
+		})
+		router.DELETE("/jobs/:id", HandleCancelJob(mockQueue))
+
+		mockQueue.On("CancelJob", mock.Anything, "job-123", "test-user").Return(nil)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("DELETE", "/jobs/job-123", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNoContent, w.Code)
+		mockQueue.AssertExpectations(t)
+	})
+
+	t.Run("Unauthorized", func(t *testing.T) {
+		mockQueue := new(MockJobQueue)
+		router := gin.New()
+		router.DELETE("/jobs/:id", HandleCancelJob(mockQueue))
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("DELETE", "/jobs/job-123", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("Error", func(t *testing.T) {
+		mockQueue := new(MockJobQueue)
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			c.Set("user_id", "test-user")
+			c.Next()
+		})
+		router.DELETE("/jobs/:id", HandleCancelJob(mockQueue))
+
+		mockQueue.On("CancelJob", mock.Anything, "job-123", "test-user").Return(errors.New("failed"))
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest("DELETE", "/jobs/job-123", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)

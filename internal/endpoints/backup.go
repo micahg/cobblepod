@@ -147,7 +147,7 @@ func HandleBackupUpload(jobQueue *queue.Queue) gin.HandlerFunc {
 		}
 
 		// Upload file to Google Drive
-		fileID, err := driveService.UploadFile(tmpFile.Name(), filepath.Base(header.Filename), "application/octet-stream")
+		fileID, err := driveService.UploadFile(c.Request.Context(), tmpFile.Name(), filepath.Base(header.Filename), "application/octet-stream")
 		if err != nil {
 			slog.Error("Failed to upload file to Drive", "error", err, "filename", header.Filename)
 			c.JSON(http.StatusInternalServerError, BackupUploadResponse{

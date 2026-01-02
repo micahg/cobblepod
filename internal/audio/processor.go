@@ -112,7 +112,7 @@ func (p *Processor) processAudioWithFFmpeg(ctx context.Context, inputPath, outpu
 }
 
 // DownloadFile downloads a file from URL and returns the temp file path
-func (p *Processor) DownloadFile(url string) (string, error) {
+func (p *Processor) DownloadFile(ctx context.Context, url string) (string, error) {
 	// Create temp file
 	tempFile, err := os.CreateTemp("", "cobblepod_*.mp3")
 	if err != nil {
@@ -122,7 +122,7 @@ func (p *Processor) DownloadFile(url string) (string, error) {
 	tempFile.Close() // Close it so we can write to it
 
 	// Download to temp file
-	err = p.downloadAudioFile(context.Background(), url, tempPath)
+	err = p.downloadAudioFile(ctx, url, tempPath)
 	if err != nil {
 		os.Remove(tempPath) // Clean up on error
 		return "", err
@@ -132,7 +132,7 @@ func (p *Processor) DownloadFile(url string) (string, error) {
 }
 
 // ProcessAudio processes audio file with FFmpeg and returns output path
-func (p *Processor) ProcessAudio(inputPath string, speed float64, offset time.Duration) (string, error) {
+func (p *Processor) ProcessAudio(ctx context.Context, inputPath string, speed float64, offset time.Duration) (string, error) {
 	// Create temp output file
 	outputFile, err := os.CreateTemp("", "cobblepod_processed_*.mp3")
 	if err != nil {
@@ -142,7 +142,7 @@ func (p *Processor) ProcessAudio(inputPath string, speed float64, offset time.Du
 	outputFile.Close() // Close it so FFmpeg can write to it
 
 	// Process with FFmpeg
-	err = p.processAudioWithFFmpeg(context.Background(), inputPath, outputPath, speed, offset)
+	err = p.processAudioWithFFmpeg(ctx, inputPath, outputPath, speed, offset)
 	if err != nil {
 		os.Remove(outputPath) // Clean up on error
 		return "", err
