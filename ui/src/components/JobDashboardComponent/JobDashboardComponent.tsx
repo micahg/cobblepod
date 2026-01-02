@@ -28,7 +28,7 @@ const JobDashboardComponent = () => {
     pollingInterval: 5000, // Poll every 5 seconds
   });
 
-  const jobs = data?.jobs || [];
+  const jobs = (data?.jobs || []).slice().reverse();
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
