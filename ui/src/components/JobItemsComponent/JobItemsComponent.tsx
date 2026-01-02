@@ -19,7 +19,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { type TransitionProps } from '@mui/material/transitions';
 import React, { forwardRef } from 'react';
-import { useGetJobItemsQuery, useCancelJobMutation } from '../../services/backupApi';
+import { useGetJobItemsQuery, useCancelJobMutation } from '../../services/api';
 
 const Transition = forwardRef(function Transition(
   props: TransitionProps & {

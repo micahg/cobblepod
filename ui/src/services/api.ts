@@ -64,8 +64,8 @@ export const setTokenGetter = (getter: () => Promise<string | null>) => {
   tokenGetter = getter;
 };
 
-export const backupApi = createApi({
-  reducerPath: 'backupApi',
+export const api = createApi({
+  reducerPath: 'api',
   baseQuery: fetchBaseQuery({
     baseUrl: getBaseUrl(),
     prepareHeaders: async (headers) => {
@@ -119,4 +119,4 @@ export const backupApi = createApi({
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation } = backupApi;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation } = api;

@@ -1,5 +1,5 @@
 import { type SyntheticEvent, Fragment, useState } from 'react';
-import { useGetJobsQuery, type Job } from '../../services/backupApi';
+import { useGetJobsQuery, type Job } from '../../services/api';
 import {
   Card,
   CardContent,

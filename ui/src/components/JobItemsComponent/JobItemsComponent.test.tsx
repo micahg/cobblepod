@@ -1,14 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { backupApi, useGetJobItemsQuery, useCancelJobMutation } from '../../services/backupApi';
+import { api, useGetJobItemsQuery, useCancelJobMutation } from '../../services/api';
 import JobItemsComponent from './JobItemsComponent';
 import { vi, Mock } from 'vitest';
 import React from 'react';
 
 // Mock the API module
-vi.mock('../../services/backupApi', async () => {
-  const actual = await vi.importActual('../../services/backupApi');
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
   return {
     ...actual,
     useGetJobItemsQuery: vi.fn(),
@@ -20,10 +20,10 @@ vi.mock('../../services/backupApi', async () => {
 const createTestStore = () =>
   configureStore({
     reducer: {
-      [backupApi.reducerPath]: backupApi.reducer,
+      [api.reducerPath]: api.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(backupApi.middleware),
+      getDefaultMiddleware().concat(api.middleware),
   });
 
 describe('JobItemsComponent', () => {
