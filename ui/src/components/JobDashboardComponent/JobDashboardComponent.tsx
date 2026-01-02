@@ -1,5 +1,5 @@
 import { type SyntheticEvent, Fragment, useState } from 'react';
-import { useGetJobsQuery } from '../../services/backupApi';
+import { useGetJobsQuery, type Job } from '../../services/backupApi';
 import {
   Card,
   CardContent,
@@ -20,7 +20,7 @@ import JobItemsComponent from '../JobItemsComponent/JobItemsComponent';
 
 const JobDashboardComponent = () => {
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'failed'>('active');
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   
   const queryStatus = activeTab === 'active' ? undefined : activeTab;
 
@@ -38,13 +38,13 @@ const JobDashboardComponent = () => {
     setActiveTab(newValue);
   };
 
-  const handleOpenJobDetails = (jobId: string) => {
-    console.log('Opening job details for job ID:', jobId);
-    setSelectedJobId(jobId);
+  const handleOpenJobDetails = (job: Job) => {
+    console.log('Opening job details for job ID:', job.id);
+    setSelectedJob(job);
   };
 
   const handleCloseJobDetails = () => {
-    setSelectedJobId(null);
+    setSelectedJob(null);
   };
 
   return (
@@ -90,7 +90,7 @@ const JobDashboardComponent = () => {
                       <IconButton 
                         edge="end" 
                         aria-label="info"
-                        onClick={() => handleOpenJobDetails(job.id)}
+                        onClick={() => handleOpenJobDetails(job)}
                       >
                         <InfoIcon />
                       </IconButton>
@@ -122,8 +122,10 @@ const JobDashboardComponent = () => {
         </Box>
       </CardContent>
       <JobItemsComponent 
-        jobId={selectedJobId} 
-        open={!!selectedJobId} 
+        jobId={selectedJob?.id || null} 
+        jobStatus={selectedJob?.status}
+        failReason={selectedJob?.fail_reason}
+        open={!!selectedJob} 
         onClose={handleCloseJobDetails} 
       />
     </Card>

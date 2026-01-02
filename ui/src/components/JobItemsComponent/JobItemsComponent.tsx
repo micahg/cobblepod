@@ -16,9 +16,10 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { type TransitionProps } from '@mui/material/transitions';
 import React, { forwardRef } from 'react';
-import { useGetJobItemsQuery } from '../../services/backupApi';
+import { useGetJobItemsQuery, useCancelJobMutation } from '../../services/backupApi';
 
 const Transition = forwardRef(function Transition(
   props: TransitionProps & {
@@ -31,14 +32,28 @@ const Transition = forwardRef(function Transition(
 
 interface JobItemsComponentProps {
   jobId: string | null;
+  jobStatus?: string;
+  failReason?: string;
   open: boolean;
   onClose: () => void;
 }
 
-const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => {
+const JobItemsComponent = ({ jobId, jobStatus, failReason, open, onClose }: JobItemsComponentProps) => {
   const { data, error, isLoading, refetch } = useGetJobItemsQuery(jobId || '', {
     skip: !jobId,
   });
+  const [cancelJob, { isLoading: isCancelling }] = useCancelJobMutation();
+
+  const handleCancel = async () => {
+    if (jobId && window.confirm('Are you sure you want to cancel this job?')) {
+      try {
+        await cancelJob(jobId).unwrap();
+        onClose();
+      } catch (err) {
+        console.error('Failed to cancel job', err);
+      }
+    }
+  };
 
   const items = data?.items || [];
 
@@ -86,6 +101,16 @@ const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => 
           <IconButton
             edge="end"
             color="inherit"
+            onClick={handleCancel}
+            disabled={isLoading || isCancelling || (jobStatus === 'completed' || jobStatus === 'failed')}
+            aria-label="cancel job"
+            sx={{ mr: 1 }}
+          >
+            <CancelIcon />
+          </IconButton>
+          <IconButton
+            edge="end"
+            color="inherit"
             onClick={() => refetch()}
             aria-label="refresh"
           >
@@ -100,15 +125,22 @@ const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => 
           </Box>
         ) : error ? (
           <Alert severity="error">Error loading job items</Alert>
-        ) : items.length === 0 ? (
-          <Typography variant="body1" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-            No items found for this job.
-          </Typography>
         ) : (
-          <List>
-            {items.map((item, index) => (
-              <React.Fragment key={item.id}>
-                <ListItem alignItems="flex-start">
+          <Box>
+            {failReason && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                Job Failed: {failReason}
+              </Alert>
+            )}
+            {items.length === 0 ? (
+              <Typography variant="body1" sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+                No items found for this job.
+              </Typography>
+            ) : (
+              <List>
+                {items.map((item, index) => (
+                  <React.Fragment key={item.id}>
+                    <ListItem alignItems="flex-start">
                   <ListItemText
                     primary={
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
@@ -160,7 +192,9 @@ const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => 
                 {index < items.length - 1 && <Divider component="li" />}
               </React.Fragment>
             ))}
-          </List>
+              </List>
+            )}
+          </Box>
         )}
       </Box>
     </Dialog>
