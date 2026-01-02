@@ -15,6 +15,7 @@ import {
   Chip
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { type TransitionProps } from '@mui/material/transitions';
 import React, { forwardRef } from 'react';
 import { useGetJobItemsQuery } from '../../services/backupApi';
@@ -35,7 +36,7 @@ interface JobItemsComponentProps {
 }
 
 const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => {
-  const { data, error, isLoading } = useGetJobItemsQuery(jobId || '', {
+  const { data, error, isLoading, refetch } = useGetJobItemsQuery(jobId || '', {
     skip: !jobId,
   });
 
@@ -82,6 +83,14 @@ const JobItemsComponent = ({ jobId, open, onClose }: JobItemsComponentProps) => 
           <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
             Job Details {jobId && `- ${jobId.substring(0, 8)}...`}
           </Typography>
+          <IconButton
+            edge="end"
+            color="inherit"
+            onClick={() => refetch()}
+            aria-label="refresh"
+          >
+            <RefreshIcon />
+          </IconButton>
         </Toolbar>
       </AppBar>
       <Box sx={{ p: 2 }}>
