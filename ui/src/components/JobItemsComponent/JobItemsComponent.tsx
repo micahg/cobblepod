@@ -112,6 +112,7 @@ const JobItemsComponent = ({ jobId, jobStatus, failReason, open, onClose }: JobI
             edge="end"
             color="inherit"
             onClick={() => refetch()}
+            disabled={isLoading || (jobStatus === 'completed' || jobStatus === 'failed')}
             aria-label="refresh"
           >
             <RefreshIcon />

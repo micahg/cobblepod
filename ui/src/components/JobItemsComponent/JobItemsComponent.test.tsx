@@ -230,4 +230,58 @@ describe('JobItemsComponent', () => {
     const cancelButton = screen.getByLabelText('cancel job');
     expect(cancelButton).toBeDisabled();
   });
+
+  it('disables refresh button when loading', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it('disables refresh button when job is completed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="completed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it('disables refresh button when job is failed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="failed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
+  });
 });
