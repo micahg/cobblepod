@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+
 	"google.golang.org/api/drive/v3"
 )
 
@@ -13,14 +15,14 @@ type Storage interface {
 	// File management operations
 	GenerateDownloadURL(driveID string) string
 	ExtractFileIDFromURL(url string) string
-	GetFiles(query string, mostRecent bool) ([]*drive.File, error)
+	GetFiles(ctx context.Context, query string, mostRecent bool) ([]*drive.File, error)
 	GetMostRecentFile(files []*drive.File) *drive.File
-	FileExists(fileID string) (bool, error)
-	DeleteFile(fileID string) error
+	FileExists(ctx context.Context, fileID string) (bool, error)
+	DeleteFile(ctx context.Context, fileID string) error
 
 	// File content operations
-	DownloadFile(fileID string) (string, error)
-	DownloadFileToTemp(fileID string) (string, error)
-	UploadFile(filePath, filename, mimeType string) (string, error)
-	UploadString(content, filename, mimeType, fileID string) (string, error)
+	DownloadFile(ctx context.Context, fileID string) (string, error)
+	DownloadFileToTemp(ctx context.Context, fileID string) (string, error)
+	UploadFile(ctx context.Context, filePath, filename, mimeType string) (string, error)
+	UploadString(ctx context.Context, content, filename, mimeType, fileID string) (string, error)
 }

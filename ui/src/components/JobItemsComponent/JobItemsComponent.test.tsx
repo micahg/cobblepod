@@ -1,17 +1,18 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { backupApi, useGetJobItemsQuery } from '../../services/backupApi';
+import { api, useGetJobItemsQuery, useCancelJobMutation } from '../../services/api';
 import JobItemsComponent from './JobItemsComponent';
 import { vi, Mock } from 'vitest';
 import React from 'react';
 
 // Mock the API module
-vi.mock('../../services/backupApi', async () => {
-  const actual = await vi.importActual('../../services/backupApi');
+vi.mock('../../services/api', async () => {
+  const actual = await vi.importActual('../../services/api');
   return {
     ...actual,
     useGetJobItemsQuery: vi.fn(),
+    useCancelJobMutation: vi.fn(),
   };
 });
 
@@ -19,15 +20,16 @@ vi.mock('../../services/backupApi', async () => {
 const createTestStore = () =>
   configureStore({
     reducer: {
-      [backupApi.reducerPath]: backupApi.reducer,
+      [api.reducerPath]: api.reducer,
     },
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(backupApi.middleware),
+      getDefaultMiddleware().concat(api.middleware),
   });
 
 describe('JobItemsComponent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (useCancelJobMutation as Mock).mockReturnValue([vi.fn(), { isLoading: false }]);
   });
 
   it('renders nothing when closed', () => {
@@ -121,5 +123,165 @@ describe('JobItemsComponent', () => {
     const closeButton = screen.getByLabelText('close');
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('calls cancelJob when cancel button is clicked', async () => {
+    const mockCancelJob = vi.fn().mockReturnValue({ unwrap: vi.fn().mockResolvedValue({}) });
+    (useCancelJobMutation as Mock).mockReturnValue([mockCancelJob, { isLoading: false }]);
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const onClose = vi.fn();
+    const store = createTestStore();
+    
+    // Mock window.confirm
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    confirmSpy.mockImplementation(() => true);
+
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" open={true} onClose={onClose} />
+      </Provider>
+    );
+
+    const cancelButton = screen.getByLabelText('cancel job');
+    fireEvent.click(cancelButton);
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockCancelJob).toHaveBeenCalledWith('job-123');
+  });
+
+  it('disables cancel button when job is completed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="completed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const cancelButton = screen.getByLabelText('cancel job');
+    expect(cancelButton).toBeDisabled();
+  });
+
+  it('disables cancel button when job is failed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="failed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const cancelButton = screen.getByLabelText('cancel job');
+    expect(cancelButton).toBeDisabled();
+  });
+
+  it('displays failure reason when provided', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent 
+          jobId="job-123" 
+          jobStatus="failed" 
+          failReason="Disk full"
+          open={true} 
+          onClose={() => {}} 
+        />
+      </Provider>
+    );
+
+    expect(screen.getByText('Job Failed: Disk full')).toBeInTheDocument();
+  });
+
+  it('disables cancel button when loading', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const cancelButton = screen.getByLabelText('cancel job');
+    expect(cancelButton).toBeDisabled();
+  });
+
+  it('disables refresh button when loading', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it('disables refresh button when job is completed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="completed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it('disables refresh button when job is failed', () => {
+    (useGetJobItemsQuery as Mock).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      error: undefined,
+    });
+
+    const store = createTestStore();
+    render(
+      <Provider store={store}>
+        <JobItemsComponent jobId="job-123" jobStatus="failed" open={true} onClose={() => {}} />
+      </Provider>
+    );
+
+    const refreshButton = screen.getByLabelText('refresh');
+    expect(refreshButton).toBeDisabled();
   });
 });

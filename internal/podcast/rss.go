@@ -1,6 +1,7 @@
 package podcast
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"log/slog"
@@ -153,8 +154,8 @@ func (p *RSSProcessor) createItemFromFile(fileData ProcessedEpisode) Item {
 }
 
 // GetRSSFeedID gets the RSS feed file ID from Google Drive
-func (p *RSSProcessor) GetRSSFeedID() string {
-	files, err := p.drive.GetFiles(config.RSSQuery, true)
+func (p *RSSProcessor) GetRSSFeedID(ctx context.Context) string {
+	files, err := p.drive.GetFiles(ctx, config.RSSQuery, true)
 	if err != nil {
 		slog.Error("Error searching for RSS feed", "error", err)
 		return ""
@@ -202,7 +203,7 @@ func (p *RSSProcessor) ExtractEpisodeMapping(xmlContent string) (map[string]Exis
 	return episodeMapping, nil
 }
 
-func (p *RSSProcessor) CanReuseEpisode(newEp queue.JobItem, oldEp ExistingEpisode, speed float64) bool {
+func (p *RSSProcessor) CanReuseEpisode(ctx context.Context, newEp queue.JobItem, oldEp ExistingEpisode, speed float64) bool {
 	// JobItem
 	//   Duration -> original duration
 	//   Offset -> offset into the duration
@@ -218,7 +219,7 @@ func (p *RSSProcessor) CanReuseEpisode(newEp queue.JobItem, oldEp ExistingEpisod
 	if fileId == "" {
 		return false
 	}
-	reallyExists, err := p.drive.FileExists(fileId)
+	reallyExists, err := p.drive.FileExists(ctx, fileId)
 	if err != nil {
 		slog.Error("Error checking if file exists", "error", err)
 	}

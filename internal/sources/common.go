@@ -19,7 +19,7 @@ type FileInfo struct {
 
 // GetLatestFile is a common function to get the most recent file matching a query
 func GetLatestFile(ctx context.Context, drive storage.Storage, query string, fileTypeName string) (*FileInfo, error) {
-	files, err := drive.GetFiles(query, true)
+	files, err := drive.GetFiles(ctx, query, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %s files: %w", fileTypeName, err)
 	}

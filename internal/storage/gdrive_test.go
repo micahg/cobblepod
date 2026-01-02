@@ -59,7 +59,7 @@ func TestGetFiles(t *testing.T) {
 	service := &GDrive{drive: driveService}
 
 	// Test the GetFiles method
-	files, err := service.GetFiles("name contains 'test'", false)
+	files, err := service.GetFiles(context.Background(), "name contains 'test'", false)
 	if err != nil {
 		t.Fatalf("GetFiles failed: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestGetFilesMostRecent(t *testing.T) {
 	service := &GDrive{drive: driveService}
 
 	// Test the GetFiles method with mostRecent=true
-	files, err := service.GetFiles("name contains 'latest'", true)
+	files, err := service.GetFiles(context.Background(), "name contains 'latest'", true)
 	if err != nil {
 		t.Fatalf("GetFiles failed: %v", err)
 	}

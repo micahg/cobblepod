@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
 import { AuthGuard, LogoutButton, useAuthToken } from './auth'
-import { setTokenGetter } from './services/backupApi'
+import { setTokenGetter } from './services/api'
 import { Container, Typography, Box, CircularProgress, CssBaseline, Stack } from '@mui/material'
 
 // Lazy load the UploadBackupComponent

@@ -45,7 +45,7 @@ func (m *M3U8Source) Process(ctx context.Context, fileInfo *FileInfo) ([]queue.J
 	m.mutex.Unlock()
 
 	// Download and parse
-	m3u8Content, err := m.drive.DownloadFile(fileID)
+	m3u8Content, err := m.drive.DownloadFile(ctx, fileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download M3U8 file: %w", err)
 	}

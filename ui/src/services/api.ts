@@ -64,8 +64,8 @@ export const setTokenGetter = (getter: () => Promise<string | null>) => {
   tokenGetter = getter;
 };
 
-export const backupApi = createApi({
-  reducerPath: 'backupApi',
+export const api = createApi({
+  reducerPath: 'api',
   baseQuery: fetchBaseQuery({
     baseUrl: getBaseUrl(),
     prepareHeaders: async (headers) => {
@@ -109,7 +109,14 @@ export const backupApi = createApi({
     getJobItems: builder.query<GetJobItemsResponse, string>({
       query: (jobId) => `/jobs/${jobId}/items`,
     }),
+    cancelJob: builder.mutation<void, string>({
+      query: (jobId) => ({
+        url: `/jobs/${jobId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Jobs'],
+    }),
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery } = backupApi;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation } = api;
