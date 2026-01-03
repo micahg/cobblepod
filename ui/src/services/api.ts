@@ -38,6 +38,11 @@ export interface GetJobsResponse {
   jobs: Job[];
 }
 
+export interface RSSResponse {
+  url?: string;
+  error?: string;
+}
+
 // Get the API base URL from runtime config
 const getBaseUrl = () => {
   // Use runtime config if loaded
@@ -116,7 +121,10 @@ export const api = createApi({
       }),
       invalidatesTags: ['Jobs'],
     }),
+    getRSS: builder.query<RSSResponse, void>({
+      query: () => '/rss',
+    }),
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation } = api;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation, useGetRSSQuery } = api;

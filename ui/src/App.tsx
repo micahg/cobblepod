@@ -8,6 +8,7 @@ import { Container, Typography, Box, CircularProgress, CssBaseline, Stack } from
 // Lazy load the UploadBackupComponent
 const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
 const JobDashboardComponent = lazy(() => import('./components/JobDashboardComponent/JobDashboardComponent'))
+const RSSComponent = lazy(() => import('./components/RSSComponent/RSSComponent'))
 
 function AppContent() {
   const { getToken } = useAuthToken()
@@ -58,10 +59,17 @@ function AppContent() {
           alignItems="flex-start"
           sx={{ mt: 4 }}
         >
-          {/* Upload Backup Component */}
-          <Suspense fallback={<CircularProgress />}>
-            <UploadBackupComponent />
-          </Suspense>
+          <Stack spacing={4} sx={{ width: '100%', maxWidth: 500 }}>
+            {/* RSS Component */}
+            <Suspense fallback={<CircularProgress />}>
+              <RSSComponent />
+            </Suspense>
+
+            {/* Upload Backup Component */}
+            <Suspense fallback={<CircularProgress />}>
+              <UploadBackupComponent />
+            </Suspense>
+          </Stack>
 
           {/* Job Dashboard Component */}
           <Suspense fallback={<CircularProgress />}>
