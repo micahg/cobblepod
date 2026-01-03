@@ -72,7 +72,7 @@ func TestHandleGetRSS(t *testing.T) {
 					return "", errors.New("auth error")
 				}
 			},
-			expectedStatus: http.StatusUnauthorized,
+			expectedStatus: http.StatusFailedDependency,
 			expectedBody:   `{"error":"Failed to authenticate with Google: auth error"}`,
 		},
 	}
