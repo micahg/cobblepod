@@ -33,6 +33,9 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 			backup.POST("/upload", HandleBackupUpload(jobQueue))
 		}
 
+		// RSS routes (protected)
+		api.GET("/rss", Auth0Middleware(), HandleGetRSS())
+
 		// Job routes (protected)
 		jobs := api.Group("/jobs")
 		jobs.Use(Auth0Middleware())
