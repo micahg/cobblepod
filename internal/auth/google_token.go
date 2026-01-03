@@ -8,6 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"google.golang.org/api/oauth2/v2"
+	"google.golang.org/api/option"
 )
 
 // TokenProvider interface for dependency injection
@@ -35,7 +38,7 @@ func GetGoogleAccessToken(ctx context.Context, userID string) (string, error) {
 	slog.Info("Fetching Google access token for user", "sub", userID)
 
 	// Use management token to fetch user's identity provider tokens
-	googleToken, err := getUserGoogleToken(userID, mgmtToken, config)
+	googleToken, err := getUserGoogleToken(ctx, userID, mgmtToken, config)
 	if err != nil {
 		return "", fmt.Errorf("failed to get Google token: %w", err)
 	}
@@ -44,7 +47,7 @@ func GetGoogleAccessToken(ctx context.Context, userID string) (string, error) {
 }
 
 // getUserGoogleToken fetches the Google access token for a user
-func getUserGoogleToken(userID, mgmtToken string, config *Auth0Config) (string, error) {
+func getUserGoogleToken(ctx context.Context, userID, mgmtToken string, config *Auth0Config) (string, error) {
 	// Extract the connection from user ID (e.g., "google-oauth2|123456")
 	parts := strings.Split(userID, "|")
 	if len(parts) < 2 {
@@ -53,7 +56,7 @@ func getUserGoogleToken(userID, mgmtToken string, config *Auth0Config) (string, 
 
 	url := fmt.Sprintf("https://%s/api/v2/users/%s", config.Domain, userID)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -88,6 +91,18 @@ func getUserGoogleToken(userID, mgmtToken string, config *Auth0Config) (string, 
 			if identity.AccessToken == "" {
 				return "", fmt.Errorf("google access token not available for user")
 			}
+
+			// validate token against https://oauth2.googleapis.com/tokeninfo
+			oauth2Service, err := oauth2.NewService(ctx, option.WithoutAuthentication())
+			if err != nil {
+				return "", fmt.Errorf("failed to create oauth2 service: %w", err)
+			}
+			tokenInfoCall := oauth2Service.Tokeninfo().AccessToken(identity.AccessToken)
+			_, err = tokenInfoCall.Do()
+			if err != nil {
+				return "", fmt.Errorf("invalid google token: %w", err)
+			}
+
 			return identity.AccessToken, nil
 		}
 	}
