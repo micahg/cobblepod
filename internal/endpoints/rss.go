@@ -60,7 +60,7 @@ func HandleGetRSS() gin.HandlerFunc {
 		googleToken, err := getGoogleAccessTokenFunc(c.Request.Context(), userID)
 		if err != nil {
 			slog.Error("Failed to get Google access token", "error", err, "user_id", userID)
-			c.JSON(http.StatusUnauthorized, RSSResponse{
+			c.JSON(http.StatusFailedDependency, RSSResponse{
 				Error: fmt.Sprintf("Failed to authenticate with Google: %v", err),
 			})
 			return

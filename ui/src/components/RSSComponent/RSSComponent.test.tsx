@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import RSSComponent from './RSSComponent'
 import * as api from '../../services/api'
+
+// Mock Auth0
+const mockLoginWithRedirect = vi.fn();
+vi.mock('@auth0/auth0-react', () => ({
+  useAuth0: () => ({
+    loginWithRedirect: mockLoginWithRedirect,
+  }),
+}))
 
 // Mock the API hook
 vi.mock('../../services/api', async () => {
@@ -55,5 +63,21 @@ describe('RSSComponent', () => {
     })
     render(<RSSComponent />)
     expect(screen.getByText('RSS feed not found')).toBeInTheDocument()
+  })
+
+  it('renders google auth error state', () => {
+    (api.useGetRSSQuery as any).mockReturnValue({
+      data: undefined,
+      error: { status: 424 },
+      isLoading: false,
+    })
+    render(<RSSComponent />)
+    expect(screen.getByText(/Google authentication failed/)).toBeInTheDocument()
+    
+    const loginButton = screen.getByText(/log in again/);
+    expect(loginButton).toBeInTheDocument()
+    
+    fireEvent.click(loginButton);
+    expect(mockLoginWithRedirect).toHaveBeenCalled();
   })
 })

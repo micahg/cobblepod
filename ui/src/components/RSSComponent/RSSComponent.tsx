@@ -1,4 +1,5 @@
 import { useGetRSSQuery } from '../../services/api';
+import { useAuth0 } from '@auth0/auth0-react';
 import { 
   Card, 
   CardContent, 
@@ -12,6 +13,9 @@ import RssFeedIcon from '@mui/icons-material/RssFeed';
 
 const RSSComponent = () => {
   const { data, error, isLoading } = useGetRSSQuery();
+  const { loginWithRedirect } = useAuth0();
+
+  const isGoogleAuthError = !!error && (error as any).status === 424;
 
   return (
     <Card sx={{ minWidth: 275, maxWidth: 500, width: '100%' }}>
@@ -29,7 +33,22 @@ const RSSComponent = () => {
           </Box>
         )}
 
-        {error && (
+        {isGoogleAuthError && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Google authentication failed. Please{' '}
+            <Link 
+              component="button" 
+              variant="body2" 
+              onClick={() => loginWithRedirect()}
+              sx={{ verticalAlign: 'baseline' }}
+            >
+              log in again
+            </Link>
+            {' '}to restore access.
+          </Alert>
+        )}
+
+        {error && !isGoogleAuthError && (
           <Alert severity="error" sx={{ mt: 2 }}>
             Failed to load RSS feed.
           </Alert>
