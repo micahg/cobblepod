@@ -65,7 +65,7 @@ func TestHandleGetRSS(t *testing.T) {
 			expectedBody:   `{"error":"RSS feed not found. Please process a backup first."}`,
 		},
 		{
-			name: "Google Auth Error",
+			name:       "Google Auth Error",
 			setupMocks: func(ms *storagemock.MockStorage, mp *MockRSSProcessor) {},
 			setupAuth: func() {
 				getGoogleAccessTokenFunc = func(ctx context.Context, userID string) (string, error) {
