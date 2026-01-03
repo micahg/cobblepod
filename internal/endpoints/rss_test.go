@@ -49,7 +49,7 @@ func TestHandleGetRSS(t *testing.T) {
 				}
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   `{"download_url":"http://download.url"}`,
+			expectedBody:   `{"url":"http://download.url"}`,
 		},
 		{
 			name: "RSS Feed Not Found",

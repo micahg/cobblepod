@@ -31,8 +31,8 @@ var (
 
 // RSSResponse represents the RSS download URL response
 type RSSResponse struct {
-	DownloadURL string `json:"download_url,omitempty"`
-	Error       string `json:"error,omitempty"`
+	URL   string `json:"url,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // HandleGetRSS returns the download URL for the user's RSS feed
@@ -92,7 +92,7 @@ func HandleGetRSS() gin.HandlerFunc {
 		downloadURL := driveService.GenerateDownloadURL(rssFileID)
 
 		c.JSON(http.StatusOK, RSSResponse{
-			DownloadURL: downloadURL,
+			URL: downloadURL,
 		})
 	}
 }
