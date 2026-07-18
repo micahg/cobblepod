@@ -2,6 +2,7 @@ package endpoints
 
 import (
 	"cobblepod/internal/queue"
+	"cobblepod/internal/state"
 
 	_ "cobblepod/docs"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
+func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue, stateManager state.CobblepodStateManager) {
 	// API group with common middleware
 	api := r.Group("/api")
 	{
@@ -43,6 +44,14 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue) {
 			jobs.GET("", HandleGetJobs(jobQueue))
 			jobs.GET("/:id/items", HandleGetJobItems(jobQueue))
 			jobs.DELETE("/:id", HandleCancelJob(jobQueue))
+		}
+
+		// Playrun routes (protected: persists per-user state, which requires
+		// knowing the Auth0 user identity to key the state store).
+		playrun := api.Group("/playrun")
+		playrun.Use(Auth0Middleware())
+		{
+			playrun.POST("/login", HandlePlayrunLogin(nil, stateManager))
 		}
 	}
 }

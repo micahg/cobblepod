@@ -43,7 +43,7 @@ type StorageCreator func(ctx context.Context, accessToken string) (storage.Stora
 
 // Processor handles the main processing logic
 type Processor struct {
-	state          *state.CobblepodStateManager
+	state          state.CobblepodStateManager
 	tokenProvider  auth.TokenProvider
 	storageCreator StorageCreator
 	queue          JobTracker
@@ -67,7 +67,7 @@ func NewProcessor(ctx context.Context, q *queue.Queue) (*Processor, error) {
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	state *state.CobblepodStateManager,
+	state state.CobblepodStateManager,
 	tokenProvider auth.TokenProvider,
 	storageCreator StorageCreator,
 	q JobTracker,
@@ -115,13 +115,13 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 
 	if stateManager != nil {
 		var err error
-		appState, err = stateManager.GetState()
+		appState, err = stateManager.GetState(job.UserID)
 		if err != nil {
-			slog.Error("Failed to get state", "error", err)
+			slog.Error("Failed to get state", "error", err, "user_id", job.UserID)
 			slog.Info("Assuming first run")
 			appState = &state.CobblepodState{}
 		} else {
-			slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339))
+			slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339), "user_id", job.UserID)
 		}
 	} else {
 		slog.Info("State manager not available, assuming first run")
@@ -146,7 +146,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	startTime := time.Now()
 	defer func() {
 		if stateManager != nil {
-			if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+			if err := stateManager.SaveState(job.UserID, &state.CobblepodState{LastRun: startTime, PlayrunJWT: appState.PlayrunJWT}); err != nil {
 				slog.Error("Failed to save state", "error", err)
 			}
 		}
@@ -216,6 +216,8 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 
 	// Delete unused episodes from storage backend
 	p.deleteUnusedEpisodes(ctx, userStorage, episodeMapping, reused)
+
+	// TODO update playrun here
 
 	return nil
 }
