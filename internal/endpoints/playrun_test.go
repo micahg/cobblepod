@@ -49,8 +49,8 @@ func TestHandlePlayrunLogin_Success(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !resp.Success || resp.Token != wantToken {
-		t.Errorf("response = %+v, want success=true token=%q", resp, wantToken)
+	if !resp.Success {
+		t.Errorf("response = %+v, want success=true", resp)
 	}
 	saved := store.GetSavedState("test-user")
 	if saved == nil {
@@ -114,8 +114,8 @@ func TestHandlePlayrunLogin_AuthError(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Success || resp.Token != "" {
-		t.Errorf("response = %+v, want success=false no token", resp)
+	if resp.Success {
+		t.Errorf("response = %+v, want success=false", resp)
 	}
 	if got := store.GetSavedState("test-user"); got != nil {
 		t.Errorf("expected no state saved on auth failure, got %+v", got)

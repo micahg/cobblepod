@@ -25,7 +25,6 @@ type PlayrunLoginRequest struct {
 // PlayrunLoginResponse is the response for POST /api/playrun/login.
 type PlayrunLoginResponse struct {
 	Success bool   `json:"success"`
-	Token   string `json:"token,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -78,31 +77,29 @@ func HandlePlayrunLogin(authenticator auth.PlayrunAuthenticator, stateManager st
 		// Persist the Playrun JWT for this user so subsequent Playrun API
 		// calls (podcast/playlist reconciliation) can reuse it without
 		// requiring the user's Playrun password on every request.
-if stateManager != nil {
-		existing, err := stateManager.GetState(userID)
-		if err != nil {
-			if !errors.Is(err, redis.Nil) {
-				slog.Error("Failed to load existing state for playrun JWT", "error", err, "user_id", userID)
+		if stateManager != nil {
+			existing, err := stateManager.GetState(userID)
+			if err != nil {
+				if !errors.Is(err, redis.Nil) {
+					slog.Error("Failed to load existing state for playrun JWT", "error", err, "user_id", userID)
+				}
+				// Either no existing state yet or a transient error: start
+				// from a fresh state so we don't block the login.
+				existing = &state.CobblepodState{}
 			}
-			// Either no existing state yet or a transient error: start
-			// from a fresh state so we don't block the login.
-			existing = &state.CobblepodState{}
-		}
-		existing.PlayrunJWT = token
-		if err := stateManager.SaveState(userID, existing); err != nil {
-			slog.Error("Failed to persist playrun JWT", "error", err, "user_id", userID)
-			// Don't fail the request: the login itself succeeded and
-			// the caller received the token. We'll retry on next login.
+			existing.PlayrunJWT = token
+			if err := stateManager.SaveState(userID, existing); err != nil {
+				slog.Error("Failed to persist playrun JWT", "error", err, "user_id", userID)
+				// Don't fail the request: the login itself succeeded. We'll retry on next login.
+			} else {
+				slog.Info("Persisted playrun JWT", "user_id", userID)
+			}
 		} else {
-			slog.Info("Persisted playrun JWT", "user_id", userID)
+			slog.Warn("No state manager configured, playrun JWT not persisted", "user_id", userID)
 		}
-	} else {
-		slog.Warn("No state manager configured, playrun JWT not persisted", "user_id", userID)
-	}
 
 		c.JSON(http.StatusOK, PlayrunLoginResponse{
 			Success: true,
-			Token:   token,
 		})
 	}
 }
