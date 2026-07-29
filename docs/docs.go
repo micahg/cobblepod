@@ -98,6 +98,175 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/jobs/{id}": {
+            "delete": {
+                "description": "Cancel a specific job",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Cancel job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{id}/items": {
+            "get": {
+                "description": "Get a list of items for a specific job",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "jobs"
+                ],
+                "summary": "Get job items",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.GetJobItemsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/playrun/login": {
+            "post": {
+                "description": "Exchanges Playrun credentials for a Playrun JWT",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "playrun"
+                ],
+                "summary": "Playrun login",
+                "parameters": [
+                    {
+                        "description": "Playrun credentials",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.PlayrunLoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.PlayrunLoginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.PlayrunLoginResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.PlayrunLoginResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rss": {
+            "get": {
+                "description": "Returns the download URL for the user's RSS feed",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rss"
+                ],
+                "summary": "Get RSS feed URL",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.RSSResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.RSSResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/endpoints.RSSResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -121,6 +290,17 @@ const docTemplate = `{
                 }
             }
         },
+        "endpoints.GetJobItemsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/queue.JobItem"
+                    }
+                }
+            }
+        },
         "endpoints.GetJobsResponse": {
             "type": "object",
             "properties": {
@@ -129,6 +309,43 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/queue.Job"
                     }
+                }
+            }
+        },
+        "endpoints.PlayrunLoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "endpoints.PlayrunLoginResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "endpoints.RSSResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
                 }
             }
         },
@@ -200,21 +417,28 @@ const docTemplate = `{
                 "downloading",
                 "processing",
                 "uploading",
-                "completed",
+                "uploaded",
                 "skipped",
+                "synced",
+                "syncfailed",
                 "failed"
             ],
             "x-enum-comments": {
                 "StatusProcessing": "ffmpeg",
-                "StatusSkipped": "reused"
+                "StatusSkipped": "reused",
+                "StatusSyncFailed": "Playrun sync failed",
+                "StatusSynced": "synced to Playrun playlist",
+                "StatusUploaded": "uploaded to storage backend"
             },
             "x-enum-descriptions": [
                 "",
                 "",
                 "ffmpeg",
                 "",
-                "",
+                "uploaded to storage backend",
                 "reused",
+                "synced to Playrun playlist",
+                "Playrun sync failed",
                 ""
             ],
             "x-enum-varnames": [
@@ -222,8 +446,10 @@ const docTemplate = `{
                 "StatusDownloading",
                 "StatusProcessing",
                 "StatusUploading",
-                "StatusCompleted",
+                "StatusUploaded",
                 "StatusSkipped",
+                "StatusSynced",
+                "StatusSyncFailed",
                 "StatusFailed"
             ]
         }

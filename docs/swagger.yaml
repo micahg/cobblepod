@@ -13,12 +13,43 @@ definitions:
       success:
         type: boolean
     type: object
+  endpoints.GetJobItemsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/queue.JobItem'
+        type: array
+    type: object
   endpoints.GetJobsResponse:
     properties:
       jobs:
         items:
           $ref: '#/definitions/queue.Job'
         type: array
+    type: object
+  endpoints.PlayrunLoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  endpoints.PlayrunLoginResponse:
+    properties:
+      error:
+        type: string
+      success:
+        type: boolean
+    type: object
+  endpoints.RSSResponse:
+    properties:
+      error:
+        type: string
+      url:
+        type: string
     type: object
   queue.Job:
     properties:
@@ -67,28 +98,37 @@ definitions:
     - downloading
     - processing
     - uploading
-    - completed
+    - uploaded
     - skipped
+    - synced
+    - syncfailed
     - failed
     type: string
     x-enum-comments:
       StatusProcessing: ffmpeg
       StatusSkipped: reused
+      StatusSyncFailed: Playrun sync failed
+      StatusSynced: synced to Playrun playlist
+      StatusUploaded: uploaded to storage backend
     x-enum-descriptions:
     - ""
     - ""
     - ffmpeg
     - ""
-    - ""
+    - uploaded to storage backend
     - reused
+    - synced to Playrun playlist
+    - Playrun sync failed
     - ""
     x-enum-varnames:
     - StatusPending
     - StatusDownloading
     - StatusProcessing
     - StatusUploading
-    - StatusCompleted
+    - StatusUploaded
     - StatusSkipped
+    - StatusSynced
+    - StatusSyncFailed
     - StatusFailed
 host: localhost:8080
 info:
@@ -153,4 +193,115 @@ paths:
       summary: Get jobs
       tags:
       - jobs
+  /jobs/{id}:
+    delete:
+      description: Cancel a specific job
+      parameters:
+      - description: Job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Cancel job
+      tags:
+      - jobs
+  /jobs/{id}/items:
+    get:
+      description: Get a list of items for a specific job
+      parameters:
+      - description: Job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/endpoints.GetJobItemsResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get job items
+      tags:
+      - jobs
+  /playrun/login:
+    post:
+      consumes:
+      - application/json
+      description: Exchanges Playrun credentials for a Playrun JWT
+      parameters:
+      - description: Playrun credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/endpoints.PlayrunLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/endpoints.PlayrunLoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/endpoints.PlayrunLoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/endpoints.PlayrunLoginResponse'
+      summary: Playrun login
+      tags:
+      - playrun
+  /rss:
+    get:
+      description: Returns the download URL for the user's RSS feed
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/endpoints.RSSResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/endpoints.RSSResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/endpoints.RSSResponse'
+      summary: Get RSS feed URL
+      tags:
+      - rss
 swagger: "2.0"

@@ -75,8 +75,10 @@ const (
 	StatusDownloading JobItemStatus = "downloading"
 	StatusProcessing  JobItemStatus = "processing" // ffmpeg
 	StatusUploading   JobItemStatus = "uploading"
-	StatusCompleted   JobItemStatus = "completed"
-	StatusSkipped     JobItemStatus = "skipped" // reused
+	StatusUploaded    JobItemStatus = "uploaded"   // uploaded to storage backend
+	StatusSkipped     JobItemStatus = "skipped"    // reused
+	StatusSynced      JobItemStatus = "synced"     // synced to Playrun playlist
+	StatusSyncFailed  JobItemStatus = "syncfailed" // Playrun sync failed
 	StatusFailed      JobItemStatus = "failed"
 )
 

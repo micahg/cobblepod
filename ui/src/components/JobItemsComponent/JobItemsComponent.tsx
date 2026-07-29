@@ -67,7 +67,13 @@ const JobItemsComponent = ({ jobId, jobStatus, failReason, open, onClose }: JobI
         return 'warning';
       case 'uploading':
         return 'primary';
-      case 'completed':
+      case 'uploaded':
+        return 'success';
+      case 'synced':
+        return 'success';
+      case 'syncfailed':
+        return 'error';
+      case 'completed': // legacy: replaced by 'uploaded' in the backend
         return 'success';
       case 'skipped':
         return 'secondary';

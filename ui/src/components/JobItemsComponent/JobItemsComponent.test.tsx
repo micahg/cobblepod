@@ -71,7 +71,7 @@ describe('JobItemsComponent', () => {
       {
         id: 'item-1',
         title: 'Episode 1',
-        status: 'completed',
+        status: 'uploaded',
         source_url: 'http://example.com/1.mp3',
         duration: 60000000000, // 60s
       },
@@ -99,7 +99,7 @@ describe('JobItemsComponent', () => {
     );
 
     expect(screen.getByText('Episode 1')).toBeInTheDocument();
-    expect(screen.getByText('completed')).toBeInTheDocument();
+    expect(screen.getByText('uploaded')).toBeInTheDocument();
     expect(screen.getByText('Episode 2')).toBeInTheDocument();
     expect(screen.getByText('failed')).toBeInTheDocument();
     expect(screen.getByText('Error: Download failed')).toBeInTheDocument();
