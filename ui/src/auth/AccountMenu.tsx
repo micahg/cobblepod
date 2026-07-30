@@ -119,11 +119,18 @@ const AccountMenu = () => {
         </MenuItem>
         <Divider />
         {playrunStatus?.loggedIn ? (
-          <MenuItem onClick={handlePlayrunLogout}>
-            <ListItemIcon>
-              <LinkOffIcon fontSize="small" />
-            </ListItemIcon>
-            Disconnect Playrun{playrunStatus.email ? ` (${playrunStatus.email})` : ''}
+          <MenuItem onClick={handlePlayrunLogout} sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <ListItemIcon>
+                <LinkOffIcon fontSize="small" />
+              </ListItemIcon>
+              Disconnect Playrun
+            </Box>
+            {playrunStatus.email && (
+              <Typography variant="body2" color="text.secondary" sx={{ pl: 4 }}>
+                {playrunStatus.email}
+              </Typography>
+            )}
           </MenuItem>
         ) : (
           <MenuItem onClick={openPlayrun}>
