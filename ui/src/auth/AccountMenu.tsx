@@ -19,11 +19,14 @@ import {
 } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import LinkIcon from '@mui/icons-material/Link';
-import { usePlayrunLoginMutation } from '../services/api';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import { usePlayrunLoginMutation, usePlayrunLogoutMutation, useGetPlayrunStatusQuery } from '../services/api';
 
 const AccountMenu = () => {
   const { user, isAuthenticated, logout } = useAuth0();
   const [playrunLogin] = usePlayrunLoginMutation();
+  const [playrunLogout] = usePlayrunLogoutMutation();
+  const { data: playrunStatus } = useGetPlayrunStatusQuery();
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [playrunOpen, setPlayrunOpen] = useState(false);
@@ -41,12 +44,18 @@ const AccountMenu = () => {
 
   const handleLogout = () => {
     handleClose();
+    playrunLogout();
     logout({ logoutParams: { returnTo: window.location.origin } });
   };
 
   const openPlayrun = () => {
     handleClose();
     setPlayrunOpen(true);
+  };
+
+  const handlePlayrunLogout = () => {
+    handleClose();
+    playrunLogout();
   };
 
   const closePlayrun = () => {
@@ -109,12 +118,21 @@ const AccountMenu = () => {
           )}
         </MenuItem>
         <Divider />
-        <MenuItem onClick={openPlayrun}>
-          <ListItemIcon>
-            <LinkIcon fontSize="small" />
-          </ListItemIcon>
-          Connect Playrun
-        </MenuItem>
+        {playrunStatus?.loggedIn ? (
+          <MenuItem onClick={handlePlayrunLogout}>
+            <ListItemIcon>
+              <LinkOffIcon fontSize="small" />
+            </ListItemIcon>
+            Disconnect Playrun{playrunStatus.email ? ` (${playrunStatus.email})` : ''}
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={openPlayrun}>
+            <ListItemIcon>
+              <LinkIcon fontSize="small" />
+            </ListItemIcon>
+            Connect Playrun
+          </MenuItem>
+        )}
         <Divider />
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>

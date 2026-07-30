@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -75,4 +76,33 @@ func (a *DefaultPlayrunAuthenticator) Login(email, password string) (string, err
 // Playrun endpoint using the package-level DefaultPlayrunAuthenticator.
 func PlayrunLogin(email, password string) (string, error) {
 	return (&DefaultPlayrunAuthenticator{}).Login(email, password)
+}
+
+// PlayrunTokenClaims holds the subset of JWT claims we surface as Playrun
+// connection status. The `exp` claim is a standard NumericDate (seconds since
+// epoch); the `email` claim is the Playrun account identifier.
+type PlayrunTokenClaims struct {
+	Exp   int64  `json:"exp"`
+	Email string `json:"email"`
+}
+
+// ParsePlayrunToken decodes the payload of a Playrun JWT and returns the
+// claims we care about (exp and email). It does NOT verify the signature:
+// the token was obtained from Playrun on login and stored locally, so we
+// trust its contents rather than maintaining a verification key. The caller
+// is responsible for treating an unparseable token as "not logged in".
+func ParsePlayrunToken(token string) (PlayrunTokenClaims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return PlayrunTokenClaims{}, fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return PlayrunTokenClaims{}, fmt.Errorf("invalid JWT payload: %w", err)
+	}
+	var claims PlayrunTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return PlayrunTokenClaims{}, fmt.Errorf("invalid JWT claims: %w", err)
+	}
+	return claims, nil
 }

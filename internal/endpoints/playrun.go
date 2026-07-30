@@ -34,6 +34,16 @@ type PlayrunLogoutResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// PlayrunStatusResponse is the response for GET /api/playrun. It reports the
+// current Playrun connection status derived from the persisted Playrun JWT:
+// whether a token is present (LoggedIn), and when known, its expiry and the
+// associated account email.
+type PlayrunStatusResponse struct {
+	LoggedIn  bool   `json:"loggedIn"`
+	Email     string `json:"email,omitempty"`
+	ExpiresAt int64  `json:"expiresAt,omitempty"`
+}
+
 // HandlePlayrunLogin logs a user in to Playrun and returns the Playrun JWT.
 // @Summary      Playrun login
 // @Description  Exchanges Playrun credentials for a Playrun JWT
@@ -159,5 +169,54 @@ func HandlePlayrunLogout(stateManager state.CobblepodStateManager) gin.HandlerFu
 		c.JSON(http.StatusOK, PlayrunLogoutResponse{
 			Success: true,
 		})
+	}
+}
+
+// HandlePlayrunStatus returns the current Playrun connection status for the
+// authenticated user, derived from the persisted Playrun JWT. It reports
+// whether a token is present (LoggedIn), and when the token can be parsed,
+// its expiry (exp claim) and the associated account email. It never fails
+// other than on missing authentication: a missing or malformed token simply
+// yields LoggedIn=false with empty email/expiry fields.
+// @Summary      Playrun status
+// @Description  Returns whether the user is logged in to Playrun, plus the token expiry and account email when available
+// @Tags         playrun
+// @Produce      json
+// @Success      200  {object}  PlayrunStatusResponse
+// @Failure      401  {object}  PlayrunStatusResponse
+// @Router       /playrun [get]
+func HandlePlayrunStatus(stateManager state.CobblepodStateManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, err := GetUserID(c)
+		if err != nil {
+			slog.Error("Failed to get user ID from context", "error", err)
+			c.JSON(http.StatusUnauthorized, PlayrunStatusResponse{})
+			return
+		}
+
+		resp := PlayrunStatusResponse{}
+		if stateManager != nil {
+			existing, err := stateManager.GetState(userID)
+			if err != nil {
+				if !errors.Is(err, redis.Nil) {
+					slog.Error("Failed to load state for playrun status", "error", err, "user_id", userID)
+				}
+				existing = &state.CobblepodState{}
+			}
+			if existing.PlayrunJWT != "" {
+				resp.LoggedIn = true
+				claims, err := auth.ParsePlayrunToken(existing.PlayrunJWT)
+				if err != nil {
+					slog.Warn("Failed to parse playrun JWT", "error", err, "user_id", userID)
+				} else {
+					resp.Email = claims.Email
+					resp.ExpiresAt = claims.Exp
+				}
+			}
+		} else {
+			slog.Warn("No state manager configured, playrun status unavailable", "user_id", userID)
+		}
+
+		c.JSON(http.StatusOK, resp)
 	}
 }

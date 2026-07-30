@@ -53,6 +53,17 @@ export interface PlayrunLoginResponse {
   error?: string;
 }
 
+export interface PlayrunLogoutResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface PlayrunStatusResponse {
+  loggedIn: boolean;
+  email?: string;
+  expiresAt?: number;
+}
+
 // Get the API base URL from runtime config
 const getBaseUrl = () => {
   // Use runtime config if loaded
@@ -140,8 +151,20 @@ export const api = createApi({
         method: 'POST',
         body,
       }),
+      invalidatesTags: ['Playrun'],
+    }),
+    playrunLogout: builder.mutation<PlayrunLogoutResponse, void>({
+      query: () => ({
+        url: '/playrun/logout',
+        method: 'POST',
+      }),
+      invalidatesTags: ['Playrun'],
+    }),
+    getPlayrunStatus: builder.query<PlayrunStatusResponse, void>({
+      query: () => '/playrun',
+      providesTags: ['Playrun'],
     }),
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation, useGetRSSQuery, usePlayrunLoginMutation } = api;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation, useGetRSSQuery, usePlayrunLoginMutation, usePlayrunLogoutMutation, useGetPlayrunStatusQuery } = api;

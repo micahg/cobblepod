@@ -51,6 +51,7 @@ func SetupRoutes(r *gin.Engine, jobQueue *queue.Queue, stateManager state.Cobble
 		playrun := api.Group("/playrun")
 		playrun.Use(Auth0Middleware())
 		{
+			playrun.GET("", HandlePlayrunStatus(stateManager))
 			playrun.POST("/login", HandlePlayrunLogin(nil, stateManager))
 			playrun.POST("/logout", HandlePlayrunLogout(stateManager))
 		}
