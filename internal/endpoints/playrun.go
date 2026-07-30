@@ -28,6 +28,12 @@ type PlayrunLoginResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// PlayrunLogoutResponse is the response for POST /api/playrun/logout.
+type PlayrunLogoutResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
 // HandlePlayrunLogin logs a user in to Playrun and returns the Playrun JWT.
 // @Summary      Playrun login
 // @Description  Exchanges Playrun credentials for a Playrun JWT
@@ -99,6 +105,58 @@ func HandlePlayrunLogin(authenticator auth.PlayrunAuthenticator, stateManager st
 		}
 
 		c.JSON(http.StatusOK, PlayrunLoginResponse{
+			Success: true,
+		})
+	}
+}
+
+// HandlePlayrunLogout logs a user out of Playrun by wiping the persisted
+// Playrun JWT from this user's application state. It does not call any
+// Playrun API logout endpoint; it only clears the locally cached token so
+// subsequent Playrun API calls no longer reuse it. Other fields of the
+// CobblepodState (e.g. LastRun) are preserved.
+// @Summary      Playrun logout
+// @Description  Clears the persisted Playrun JWT for the authenticated user
+// @Tags         playrun
+// @Produce      json
+// @Success      200   {object}  PlayrunLogoutResponse
+// @Failure      401   {object}  PlayrunLogoutResponse
+// @Router       /playrun/logout [post]
+func HandlePlayrunLogout(stateManager state.CobblepodStateManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, err := GetUserID(c)
+		if err != nil {
+			slog.Error("Failed to get user ID from context", "error", err)
+			c.JSON(http.StatusUnauthorized, PlayrunLogoutResponse{
+				Success: false,
+				Error:   "Unauthorized",
+			})
+			return
+		}
+
+		if stateManager != nil {
+			existing, err := stateManager.GetState(userID)
+			if err != nil {
+				if !errors.Is(err, redis.Nil) {
+					slog.Error("Failed to load existing state for playrun logout", "error", err, "user_id", userID)
+				}
+				existing = &state.CobblepodState{}
+			}
+			existing.PlayrunJWT = ""
+			if err := stateManager.SaveState(userID, existing); err != nil {
+				slog.Error("Failed to clear playrun JWT", "error", err, "user_id", userID)
+				c.JSON(http.StatusInternalServerError, PlayrunLogoutResponse{
+					Success: false,
+					Error:   "Failed to clear playrun JWT",
+				})
+				return
+			}
+			slog.Info("Cleared playrun JWT", "user_id", userID)
+		} else {
+			slog.Warn("No state manager configured, playrun JWT not cleared", "user_id", userID)
+		}
+
+		c.JSON(http.StatusOK, PlayrunLogoutResponse{
 			Success: true,
 		})
 	}

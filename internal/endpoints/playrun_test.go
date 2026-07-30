@@ -24,6 +24,10 @@ func newPlayrunRouter(a auth.PlayrunAuthenticator, store state.CobblepodStateMan
 		c.Set("user_id", "test-user")
 		HandlePlayrunLogin(a, store)(c)
 	})
+	r.POST("/api/playrun/logout", func(c *gin.Context) {
+		c.Set("user_id", "test-user")
+		HandlePlayrunLogout(store)(c)
+	})
 	return r
 }
 
@@ -135,5 +139,60 @@ func TestHandlePlayrunLogin_BadRequest(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestHandlePlayrunLogout_Success(t *testing.T) {
+	store := statemock.NewMockCobblepodStateManager()
+	store.SetState("test-user", &state.CobblepodState{
+		PlayrunJWT: "jwt-to-clear",
+		LastRun:    time.Unix(1700000000, 0),
+	})
+	router := newPlayrunRouter(nil, store)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/playrun/logout", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var resp PlayrunLogoutResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.Success {
+		t.Errorf("response = %+v, want success=true", resp)
+	}
+	saved := store.GetSavedState("test-user")
+	if saved == nil {
+		t.Fatal("expected state to be saved for user")
+	}
+	if saved.PlayrunJWT != "" {
+		t.Errorf("saved JWT = %q, want empty", saved.PlayrunJWT)
+	}
+	wantLastRun := time.Unix(1700000000, 0)
+	if !saved.LastRun.Equal(wantLastRun) {
+		t.Errorf("saved LastRun = %v, want %v (must be preserved)", saved.LastRun, wantLastRun)
+	}
+}
+
+func TestHandlePlayrunLogout_NoExistingState(t *testing.T) {
+	store := statemock.NewMockCobblepodStateManager()
+	router := newPlayrunRouter(nil, store)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/playrun/logout", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	saved := store.GetSavedState("test-user")
+	if saved == nil {
+		t.Fatal("expected state to be saved for user")
+	}
+	if saved.PlayrunJWT != "" {
+		t.Errorf("saved JWT = %q, want empty", saved.PlayrunJWT)
 	}
 }
