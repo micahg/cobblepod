@@ -687,3 +687,39 @@ func TestSyncPlayrun_ResolvesDriveFileIDWhenDownloadURLEmpty(t *testing.T) {
 		t.Errorf("expected Ep1 -> StatusSynced, got %v (found=%v)", s, ok)
 	}
 }
+
+func TestReconcileJobItems(t *testing.T) {
+	// After uploadResults, allTasks carries the authoritative per-item status
+	// (the workers persisted those statuses to Redis and to their local
+	// task.Item copies but never back to job.Items). reconcileJobItems writes
+	// them back so the finalize/syncPlayrun guards read accurate state.
+	proc, _ := newSyncProc(&mockPlayrunClient{})
+	job := &queue.Job{ID: "j1", Items: []queue.JobItem{
+		{ID: "id-up", Title: "Uploaded", Status: queue.StatusPending},
+		{ID: "id-sk", Title: "Skipped", Status: queue.StatusPending},
+		{ID: "id-fl", Title: "Failed", Status: queue.StatusPending}, // not in tasks -> stays pending
+	}}
+	tasks := []Task{
+		{Item: queue.JobItem{ID: "id-up", Title: "Uploaded", Status: queue.StatusUploaded}},
+		{Item: queue.JobItem{ID: "id-sk", Title: "Skipped", Status: queue.StatusSkipped}},
+	}
+
+	proc.reconcileJobItems(job, tasks)
+
+	cases := map[string]queue.JobItemStatus{
+		"Uploaded": queue.StatusUploaded,
+		"Skipped":  queue.StatusSkipped,
+		"Failed":   queue.StatusPending, // unmatched -> unchanged
+	}
+	for title, want := range cases {
+		var got queue.JobItemStatus
+		for _, it := range job.Items {
+			if it.Title == title {
+				got = it.Status
+			}
+		}
+		if got != want {
+			t.Errorf("item %q: want %v, got %v", title, want, got)
+		}
+	}
+}

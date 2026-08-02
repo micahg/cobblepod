@@ -544,6 +544,12 @@ func (p *Processor) processEntries(ctx context.Context, episodeMapping map[strin
 		return nil, err
 	}
 
+	// Sync in-memory job.Items with the statuses the workers just persisted
+	// so the finalize/syncPlayrun guards read accurate state. Without this,
+	// job.Items would still hold StatusPending from SetJobItems and the
+	// synced/syncfailed transitions would be skipped entirely.
+	p.reconcileJobItems(job, allTasks)
+
 	// Create and upload RSS XML feed and save state
 	feedURL, err := updateFeed(ctx, podcastProcessor, storageService, results)
 	if err != nil {
@@ -565,6 +571,26 @@ func (p *Processor) processEntries(ctx context.Context, episodeMapping map[strin
 func (p *Processor) finalize(ctx context.Context, job *queue.Job, results []podcast.ProcessedEpisode, storageService storage.Storage, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode, feedURL, playrunJWT string) {
 	p.deleteUnusedEpisodes(ctx, storageService, episodeMapping, reused)
 	p.syncPlayrun(ctx, job, results, storageService, feedURL, playrunJWT)
+}
+
+// reconcileJobItems syncs the in-memory job.Items with the statuses the
+// workers just persisted to the queue. The workers (download/ffmpeg/upload)
+// write status to Redis and to their local task.Item copies, but never back
+// to job.Items, which still holds the StatusPending values from SetJobItems.
+// We must sync after upload so finalize/syncPlayrun's guards read accurate
+// state instead of stale StatusPending and skip the synced/syncfailed
+// transitions entirely.
+func (p *Processor) reconcileJobItems(job *queue.Job, tasks []Task) {
+	statusByID := make(map[string]queue.JobItemStatus, len(tasks))
+	for _, t := range tasks {
+		statusByID[t.Item.ID] = t.Item.Status
+	}
+	for i, it := range job.Items {
+		if s, ok := statusByID[it.ID]; ok {
+			it.Status = s
+			job.Items[i] = it
+		}
+	}
 }
 
 // syncPlayrun reconciles the watch playlist with the freshly published feed via
