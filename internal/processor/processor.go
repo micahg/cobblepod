@@ -11,6 +11,7 @@ import (
 	"cobblepod/internal/audio"
 	"cobblepod/internal/auth"
 	"cobblepod/internal/config"
+	"cobblepod/internal/integration/playrun"
 	"cobblepod/internal/podcast"
 	"cobblepod/internal/queue"
 	"cobblepod/internal/sources"
@@ -41,12 +42,17 @@ type JobTracker interface {
 // StorageCreator function type for creating storage service
 type StorageCreator func(ctx context.Context, accessToken string) (storage.Storage, error)
 
+// PlayrunClientFactory builds a Playrun client from a per-user JWT. The
+// indirection lets tests inject a mock client without touching the network.
+type PlayrunClientFactory func(jwt string) playrun.Client
+
 // Processor handles the main processing logic
 type Processor struct {
-	state          *state.CobblepodStateManager
-	tokenProvider  auth.TokenProvider
-	storageCreator StorageCreator
-	queue          JobTracker
+	state                state.CobblepodStateManager
+	tokenProvider        auth.TokenProvider
+	storageCreator       StorageCreator
+	queue                JobTracker
+	playrunClientFactory PlayrunClientFactory
 }
 
 // NewProcessor creates a new processor with default dependencies
@@ -58,25 +64,31 @@ func NewProcessor(ctx context.Context, q *queue.Queue) (*Processor, error) {
 	}
 
 	return &Processor{
-		state:          state,
-		tokenProvider:  &auth.DefaultTokenProvider{},
-		storageCreator: storage.NewServiceWithToken,
-		queue:          q,
+		state:                state,
+		tokenProvider:        &auth.DefaultTokenProvider{},
+		storageCreator:       storage.NewServiceWithToken,
+		queue:                q,
+		playrunClientFactory: playrun.New,
 	}, nil
 }
 
 // NewProcessorWithDependencies creates a new processor with injected dependencies for testing
 func NewProcessorWithDependencies(
-	state *state.CobblepodStateManager,
+	state state.CobblepodStateManager,
 	tokenProvider auth.TokenProvider,
 	storageCreator StorageCreator,
 	q JobTracker,
+	playrunClientFactory PlayrunClientFactory,
 ) *Processor {
+	if playrunClientFactory == nil {
+		playrunClientFactory = playrun.New
+	}
 	return &Processor{
-		state:          state,
-		tokenProvider:  tokenProvider,
-		storageCreator: storageCreator,
-		queue:          q,
+		state:                state,
+		tokenProvider:        tokenProvider,
+		storageCreator:       storageCreator,
+		queue:                q,
+		playrunClientFactory: playrunClientFactory,
 	}
 }
 
@@ -115,13 +127,13 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 
 	if stateManager != nil {
 		var err error
-		appState, err = stateManager.GetState()
+		appState, err = stateManager.GetState(job.UserID)
 		if err != nil {
-			slog.Error("Failed to get state", "error", err)
+			slog.Error("Failed to get state", "error", err, "user_id", job.UserID)
 			slog.Info("Assuming first run")
 			appState = &state.CobblepodState{}
 		} else {
-			slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339))
+			slog.Debug("State loaded", "last_run", appState.LastRun.Format(time.RFC3339), "user_id", job.UserID)
 		}
 	} else {
 		slog.Info("State manager not available, assuming first run")
@@ -146,7 +158,7 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	startTime := time.Now()
 	defer func() {
 		if stateManager != nil {
-			if err := stateManager.SaveState(&state.CobblepodState{LastRun: startTime}); err != nil {
+			if err := stateManager.SaveState(job.UserID, &state.CobblepodState{LastRun: startTime, PlayrunJWT: appState.PlayrunJWT}); err != nil {
 				slog.Error("Failed to save state", "error", err)
 			}
 		}
@@ -209,13 +221,14 @@ func (p *Processor) Run(ctx context.Context, job *queue.Job) error {
 	}
 	job.Items = entries
 
-	reused, err := p.processEntries(ctx, episodeMapping, userStorage, audioProcessor, podcastProcessor, job)
+	reused, err := p.processEntries(ctx, episodeMapping, userStorage, audioProcessor, podcastProcessor, job, appState.PlayrunJWT)
 	if err != nil {
 		return err
 	}
 
-	// Delete unused episodes from storage backend
-	p.deleteUnusedEpisodes(ctx, userStorage, episodeMapping, reused)
+	// The feed has been published and the playlist reconciled inside
+	// processEntries (via finalize). Nothing left to do here.
+	_ = reused
 
 	return nil
 }
@@ -370,7 +383,7 @@ func uploadResults(ctx context.Context, storageService storage.Storage, tasks []
 		results = append(results, result)
 
 		// Update status
-		task.Item.Status = queue.StatusCompleted
+		task.Item.Status = queue.StatusUploaded
 		if err := q.UpdateJobItem(ctx, jobID, task.Item); err != nil {
 			slog.Error("Failed to update job item status", "error", err)
 		}
@@ -380,19 +393,21 @@ func uploadResults(ctx context.Context, storageService storage.Storage, tasks []
 	return results, nil
 }
 
-// updateFeed creates and uploads the RSS XML feed and saves the application state
-func updateFeed(ctx context.Context, podcastProcessor *podcast.RSSProcessor, storageService storage.Storage, results []podcast.ProcessedEpisode) error {
+// updateFeed creates and uploads the RSS XML feed and saves the application state.
+// It returns the public download URL of the feed so downstream steps (Playrun
+// registration) can use it without recomputing.
+func updateFeed(ctx context.Context, podcastProcessor *podcast.RSSProcessor, storageService storage.Storage, results []podcast.ProcessedEpisode) (string, error) {
 	// Create and upload RSS XML
 	xmlFeed := podcastProcessor.CreateRSSXML(results)
 	rssFileID, err := storageService.UploadString(ctx, xmlFeed, "playrun_addict.xml", "application/rss+xml", podcastProcessor.GetRSSFeedID(ctx))
 	if err != nil {
-		return fmt.Errorf("failed to upload RSS feed: %w", err)
+		return "", fmt.Errorf("failed to upload RSS feed: %w", err)
 	}
 
 	rssDownloadURL := storageService.GenerateDownloadURL(rssFileID)
 	slog.Info("RSS Feed created", "download_url", rssDownloadURL)
 
-	return nil
+	return rssDownloadURL, nil
 }
 
 // deleteUnusedEpisodes removes episodes from storage backend that are no longer in the current playlist
@@ -415,7 +430,7 @@ func (p *Processor) deleteUnusedEpisodes(ctx context.Context, storageService Sto
 }
 
 // processEntries returns the reused episodes
-func (p *Processor) processEntries(ctx context.Context, episodeMapping map[string]podcast.ExistingEpisode, storageService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor, job *queue.Job) (map[string]podcast.ExistingEpisode, error) {
+func (p *Processor) processEntries(ctx context.Context, episodeMapping map[string]podcast.ExistingEpisode, storageService storage.Storage, audioProcessor *audio.Processor, podcastProcessor *podcast.RSSProcessor, job *queue.Job, playrunJWT string) (map[string]podcast.ExistingEpisode, error) {
 	// Process entries locally
 	var tasks []Task
 
@@ -529,10 +544,182 @@ func (p *Processor) processEntries(ctx context.Context, episodeMapping map[strin
 		return nil, err
 	}
 
+	// Sync in-memory job.Items with the statuses the workers just persisted
+	// so the finalize/syncPlayrun guards read accurate state. Without this,
+	// job.Items would still hold StatusPending from SetJobItems and the
+	// synced/syncfailed transitions would be skipped entirely.
+	p.reconcileJobItems(job, allTasks)
+
 	// Create and upload RSS XML feed and save state
-	if err := updateFeed(ctx, podcastProcessor, storageService, results); err != nil {
+	feedURL, err := updateFeed(ctx, podcastProcessor, storageService, results)
+	if err != nil {
 		slog.Error("Failed to update feed", "error", err)
 	}
 
+	// Finalize: delete unused files from the storage backend and reconcile the
+	// watch playlist with the freshly-published feed. Failures here do not
+	// fail the job (the feed is the source of truth; we will retry next run).
+	p.finalize(ctx, job, results, storageService, episodeMapping, reused, feedURL, playrunJWT)
+
 	return reused, nil
+}
+
+// finalize runs the post-publish bookkeeping: removing unused episodes from the
+// storage backend and reconciling the Playrun watch playlist with the freshly
+// published feed. Both steps are best-effort; the published feed is the source
+// of truth.
+func (p *Processor) finalize(ctx context.Context, job *queue.Job, results []podcast.ProcessedEpisode, storageService storage.Storage, episodeMapping map[string]podcast.ExistingEpisode, reused map[string]podcast.ExistingEpisode, feedURL, playrunJWT string) {
+	p.deleteUnusedEpisodes(ctx, storageService, episodeMapping, reused)
+	p.syncPlayrun(ctx, job, results, storageService, feedURL, playrunJWT)
+}
+
+// reconcileJobItems syncs the in-memory job.Items with the statuses the
+// workers just persisted to the queue. The workers (download/ffmpeg/upload)
+// write status to Redis and to their local task.Item copies, but never back
+// to job.Items, which still holds the StatusPending values from SetJobItems.
+// We must sync after upload so finalize/syncPlayrun's guards read accurate
+// state instead of stale StatusPending and skip the synced/syncfailed
+// transitions entirely.
+func (p *Processor) reconcileJobItems(job *queue.Job, tasks []Task) {
+	statusByID := make(map[string]queue.JobItemStatus, len(tasks))
+	for _, t := range tasks {
+		statusByID[t.Item.ID] = t.Item.Status
+	}
+	for i, it := range job.Items {
+		if s, ok := statusByID[it.ID]; ok {
+			it.Status = s
+			job.Items[i] = it
+		}
+	}
+}
+
+// syncPlayrun reconciles the watch playlist with the freshly published feed via
+// the Playrun HTTP API. Per docs/playrun-playlist-api.md:
+//  1. Upsert the custom feed (creates the podcast if needed); get its UUID.
+//  2. Read the current watch playlist.
+//  3. For each just-published episode whose UUID is not in the playlist, subscribe it.
+//  4. For each playlist entry that belongs to our podcast but is not in the
+//     just-published feed, unsubscribe it (don't touch other podcasts' entries).
+//
+// JobItem status transitions: items currently in StatusUploaded are moved to
+// StatusSynced (success) or StatusSyncFailed (any failure on the
+// validate/upsert/playlist-read path applies to all items; per-item Subscribe
+// failures are scoped to that item). StatusSkipped items are left untouched,
+// though they remain part of the desired playlist so we don't unsubscribe them.
+func (p *Processor) syncPlayrun(ctx context.Context, job *queue.Job, results []podcast.ProcessedEpisode, storageService storage.Storage, feedURL, jwt string) {
+	if jwt == "" {
+		slog.Debug("Playrun not linked, skipping sync", "user_id", job.UserID)
+		return
+	}
+	if feedURL == "" {
+		slog.Debug("Feed URL empty (updateFeed likely failed), skipping sync", "user_id", job.UserID)
+		return
+	}
+
+	client := p.playrunClientFactory(jwt)
+
+	if err := client.Validate(ctx); err != nil {
+		slog.Warn("Playrun token invalid, skipping sync", "error", err, "user_id", job.UserID)
+		p.markUploadedItems(ctx, job, queue.StatusSyncFailed)
+		return
+	}
+
+	podUUID, err := client.UpsertPodcast(ctx, feedURL)
+	if err != nil {
+		slog.Error("Failed to register custom feed with Playrun", "error", err)
+		p.markUploadedItems(ctx, job, queue.StatusSyncFailed)
+		return
+	}
+
+	current, err := client.GetPlaylist(ctx)
+	if err != nil {
+		slog.Error("Failed to read Playrun playlist", "error", err)
+		p.markUploadedItems(ctx, job, queue.StatusSyncFailed)
+		return
+	}
+
+	currentUUIDs := make(map[string]bool, len(current))
+	for _, entry := range current {
+		currentUUIDs[entry.UUID] = true
+	}
+
+	// Build desired from results (covers both freshly uploaded and reused
+	// episodes — both are in the published feed).
+	desired := make(map[string]playrun.PlaylistEntry, len(results))
+	for _, ep := range results {
+		enclosureURL := ep.DownloadURL
+		if enclosureURL == "" && ep.DriveFileID != "" {
+			enclosureURL = storageService.GenerateDownloadURL(ep.DriveFileID)
+		}
+		if enclosureURL == "" {
+			slog.Warn("Missing enclosure URL; cannot sync episode to Playrun", "title", ep.Title)
+			continue
+		}
+		desired[playrun.EpisodeUUID(enclosureURL)] = playrun.MakeEpisode(ep.Title, enclosureURL, podUUID)
+	}
+
+	// Subscribe desired not in current, then mark synced (or syncfailed).
+	for uuid, ep := range desired {
+		if currentUUIDs[uuid] {
+			// Already on the watch; nothing to subscribe, but its JobItem can
+			// move to StatusSynced.
+			p.setItemStatus(ctx, job, ep.Title, queue.StatusSynced)
+			continue
+		}
+		if err := client.Subscribe(ctx, ep); err != nil {
+			slog.Error("Failed to subscribe episode to Playrun", "title", ep.Title, "error", err)
+			p.setItemStatus(ctx, job, ep.Title, queue.StatusSyncFailed)
+			continue
+		}
+		p.setItemStatus(ctx, job, ep.Title, queue.StatusSynced)
+	}
+
+	// Unsubscribe entries that belong to our podcast but are no longer in the
+	// feed. These don't have matching JobItems in the current run, so there's no
+	// per-item status to update — failures are just logged.
+	for _, entry := range current {
+		if entry.Podcast.UUID != podUUID {
+			continue
+		}
+		if _, ok := desired[entry.UUID]; ok {
+			continue
+		}
+		if err := client.Unsubscribe(ctx, entry.UUID, podUUID); err != nil {
+			slog.Warn("Failed to unsubscribe stale entry from Playrun", "uuid", entry.UUID, "title", entry.Title, "error", err)
+		}
+	}
+}
+
+// setItemStatus updates the first job item whose Title matches and whose status
+// is currently StatusUploaded. Only StatusUploaded items transition through the
+// sync phase; StatusSkipped entries are intentionally left alone.
+func (p *Processor) setItemStatus(ctx context.Context, job *queue.Job, title string, status queue.JobItemStatus) {
+	for i, item := range job.Items {
+		if item.Title != title {
+			continue
+		}
+		if item.Status != queue.StatusUploaded {
+			return
+		}
+		item.Status = status
+		job.Items[i] = item
+		if err := p.queue.UpdateJobItem(ctx, job.ID, item); err != nil {
+			slog.Error("Failed to update job item status", "error", err, "title", title)
+		}
+		return
+	}
+}
+
+// markUploadedItems transitions every StatusUploaded JobItem to status.
+func (p *Processor) markUploadedItems(ctx context.Context, job *queue.Job, status queue.JobItemStatus) {
+	for i, item := range job.Items {
+		if item.Status != queue.StatusUploaded {
+			continue
+		}
+		item.Status = status
+		job.Items[i] = item
+		if err := p.queue.UpdateJobItem(ctx, job.ID, item); err != nil {
+			slog.Error("Failed to update job item status", "error", err, "title", item.Title)
+		}
+	}
 }

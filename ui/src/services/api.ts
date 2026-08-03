@@ -43,6 +43,27 @@ export interface RSSResponse {
   error?: string;
 }
 
+export interface PlayrunLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface PlayrunLoginResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface PlayrunLogoutResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface PlayrunStatusResponse {
+  loggedIn: boolean;
+  email?: string;
+  expiresAt?: number;
+}
+
 // Get the API base URL from runtime config
 const getBaseUrl = () => {
   // Use runtime config if loaded
@@ -92,7 +113,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['Backup', 'Jobs'],
+  tagTypes: ['Backup', 'Jobs', 'Playrun'],
   endpoints: (builder) => ({
     uploadBackup: builder.mutation<UploadBackupResponse, File>({
       query: (file) => {
@@ -124,7 +145,26 @@ export const api = createApi({
     getRSS: builder.query<RSSResponse, void>({
       query: () => '/rss',
     }),
+    playrunLogin: builder.mutation<PlayrunLoginResponse, PlayrunLoginRequest>({
+      query: (body) => ({
+        url: '/playrun/login',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Playrun'],
+    }),
+    playrunLogout: builder.mutation<PlayrunLogoutResponse, void>({
+      query: () => ({
+        url: '/playrun/logout',
+        method: 'POST',
+      }),
+      invalidatesTags: ['Playrun'],
+    }),
+    getPlayrunStatus: builder.query<PlayrunStatusResponse, void>({
+      query: () => '/playrun',
+      providesTags: ['Playrun'],
+    }),
   }),
 });
 
-export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation, useGetRSSQuery } = api;
+export const { useUploadBackupMutation, useGetJobsQuery, useGetJobItemsQuery, useCancelJobMutation, useGetRSSQuery, usePlayrunLoginMutation, usePlayrunLogoutMutation, useGetPlayrunStatusQuery } = api;

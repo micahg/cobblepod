@@ -13,15 +13,28 @@ import (
 )
 
 type CobblepodState struct {
-	LastRun time.Time
+	LastRun    time.Time
+	PlayrunJWT string
 }
 
-type CobblepodStateManager struct {
+// CobblepodStateManager is the interface for persisting per-user application
+// state. The production implementation is backed by Valkey/Redis; tests can
+// inject a mock (see internal/state/mock).
+type CobblepodStateManager interface {
+	GetState(userID string) (*CobblepodState, error)
+	SaveState(userID string, state *CobblepodState) error
+	Close() error
+}
+
+// valkeyStateManager is the production CobblepodStateManager, backed by Valkey.
+type valkeyStateManager struct {
 	client *redis.Client
 }
 
-// NewStateManager creates a new state connection using pure Go redis client
-func NewStateManager(ctx context.Context) (*CobblepodStateManager, error) {
+// NewStateManager creates a new state connection using pure Go redis client.
+// On connection failure it returns (nil, err); callers should treat a nil
+// manager as "state unavailable" and degrade gracefully.
+func NewStateManager(ctx context.Context) (CobblepodStateManager, error) {
 	addr := fmt.Sprintf("%s:%d", config.ValkeyHost, config.ValkeyPort)
 	slog.Debug("Connecting to Valkey", "addr", addr)
 	client := redis.NewClient(&redis.Options{
@@ -30,26 +43,29 @@ func NewStateManager(ctx context.Context) (*CobblepodStateManager, error) {
 		DB:       0,
 	})
 
-	sm := &CobblepodStateManager{client: client}
-
 	// Test the connection
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		sm.client = nil
-		return sm, fmt.Errorf("failed to connect to Valkey: %w", err)
+		// Close the unused client to avoid leaking the connection.
+		_ = client.Close()
+		return nil, fmt.Errorf("failed to connect to Valkey: %w", err)
 	}
 
-	return sm, nil
+	return &valkeyStateManager{client: client}, nil
 }
 
-func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
+func (sm *valkeyStateManager) stateKey(userID string) string {
+	return fmt.Sprintf("cobblepod:state:%s", userID)
+}
+
+func (sm *valkeyStateManager) GetState(userID string) (*CobblepodState, error) {
 	if sm.client == nil {
 		return nil, fmt.Errorf("state manager is not connected")
 	}
 
-	stateStr, err := sm.client.Get(context.Background(), "state").Result()
+	stateStr, err := sm.client.Get(context.Background(), sm.stateKey(userID)).Result()
 	if err != nil {
-		slog.Error("Error getting state", "error", err)
+		slog.Error("Error getting state", "error", err, "user_id", userID)
 		return &CobblepodState{LastRun: time.Unix(0, 0)}, err
 	}
 
@@ -61,7 +77,7 @@ func (sm *CobblepodStateManager) GetState() (*CobblepodState, error) {
 	return &state, nil
 }
 
-func (sm *CobblepodStateManager) SaveState(state *CobblepodState) error {
+func (sm *valkeyStateManager) SaveState(userID string, state *CobblepodState) error {
 	if sm.client == nil {
 		return fmt.Errorf("state manager is not connected")
 	}
@@ -70,9 +86,17 @@ func (sm *CobblepodStateManager) SaveState(state *CobblepodState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	err = sm.client.Set(context.Background(), "state", stateJSON, 0).Err()
+	err = sm.client.Set(context.Background(), sm.stateKey(userID), stateJSON, 0).Err()
 	if err != nil {
 		return fmt.Errorf("failed to save state: %w", err)
+	}
+	return nil
+}
+
+// Close closes the state manager connection
+func (sm *valkeyStateManager) Close() error {
+	if sm.client != nil {
+		return sm.client.Close()
 	}
 	return nil
 }

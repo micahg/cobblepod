@@ -1,63 +1,66 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Provider } from 'react-redux'
 import { store } from './store/store'
-import { AuthGuard, LogoutButton, useAuthToken } from './auth'
+import { AuthGuard, useAuthToken } from './auth'
 import { setTokenGetter } from './services/api'
-import { Container, Typography, Box, CircularProgress, CssBaseline, Stack } from '@mui/material'
+import { AppBar, Toolbar, Container, Typography, CircularProgress, CssBaseline, Stack, Box } from '@mui/material'
 
-// Lazy load the UploadBackupComponent
+// Lazy load the components so their chunks load on demand.
+const AccountMenu = lazy(() => import('./auth/AccountMenu'))
 const UploadBackupComponent = lazy(() => import('./components/UploadBackupComponent/UploadBackupComponent'))
 const JobDashboardComponent = lazy(() => import('./components/JobDashboardComponent/JobDashboardComponent'))
 const RSSComponent = lazy(() => import('./components/RSSComponent/RSSComponent'))
 
 function AppContent() {
   const { getToken } = useAuthToken()
+  const [tokenGetterReady, setTokenGetterReady] = useState(false)
 
-  // Set up token getter for RTK Query
+  // Register the token getter for RTK Query before any query consumer mounts.
+  // Auth0 guarantees we can mint a token, but the getter plumbing is custom;
+  // gate rendering on it so RTK Query effects never run before it's set.
   useEffect(() => {
-    const initializeToken = async () => {
-      console.log('Setting token getter');
-      setTokenGetter(getToken)
-      
-      // Test the token getter immediately
-      try {
-        const token = await getToken();
-        if (token) {
-          console.log('Token retrieved successfully, length:', token.length);
-        } else {
-          console.warn('Token is null - check Auth0 configuration');
-        }
-      } catch (err) {
-        console.error('Error getting token:', err);
-      }
-    };
-    
-    initializeToken();
+    setTokenGetter(getToken)
+    setTokenGetterReady(true)
   }, [getToken])
 
-  return (
-    <Container 
-      maxWidth="lg"
-      sx={{ 
-        display: 'flex', 
-        flexDirection: 'row', 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        minHeight: '100vh', 
-        minWidth: '100vw'
-      }}
-    >
-      <Box sx={{ my: 4, textAlign: 'center', width: '100%' }}>
-        <Typography variant="h3" component="h1" gutterBottom>
-          Cobblepod Dashboard
-        </Typography>
+  if (!tokenGetterReady) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+        <CircularProgress />
+      </Box>
+    )
+  }
 
-        <Stack 
-          direction={{ xs: 'column', md: 'row' }} 
-          spacing={4} 
-          justifyContent="center" 
+  return (
+    <>
+      <AppBar position="sticky" color="default" elevation={0}>
+        <Toolbar>
+          <Typography variant="h6" component="h1" sx={{ flex: 1 }}>
+            Cobblepod Dashboard
+          </Typography>
+          <Suspense fallback={<CircularProgress size={24} />}>
+            <AccountMenu />
+          </Suspense>
+        </Toolbar>
+      </AppBar>
+
+      <Container
+        maxWidth="lg"
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          minHeight: 'calc(100vh - 64px)',
+          minWidth: '100vw',
+          py: 4,
+        }}
+      >
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={4}
+          justifyContent="center"
           alignItems="flex-start"
-          sx={{ mt: 4 }}
         >
           <Stack spacing={4} sx={{ width: '100%', maxWidth: 500 }}>
             {/* RSS Component */}
@@ -76,12 +79,8 @@ function AppContent() {
             <JobDashboardComponent />
           </Suspense>
         </Stack>
-        
-        <Box sx={{ mt: 4 }}>
-          <LogoutButton />
-        </Box>
-      </Box>
-    </Container>
+      </Container>
+    </>
   )
 }
 

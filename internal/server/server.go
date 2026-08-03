@@ -9,15 +9,17 @@ import (
 
 	"cobblepod/internal/endpoints"
 	"cobblepod/internal/queue"
+	"cobblepod/internal/state"
 
 	"github.com/gin-gonic/gin"
 )
 
 // Server wraps the HTTP server
 type Server struct {
-	httpServer *http.Server
-	router     *gin.Engine
-	queue      *queue.Queue
+	httpServer   *http.Server
+	router       *gin.Engine
+	queue        *queue.Queue
+	stateManager state.CobblepodStateManager
 }
 
 // NewServer creates a new HTTP server instance
@@ -34,6 +36,13 @@ func NewServer(port string) (*Server, error) {
 		return nil, err
 	}
 
+	// Initialize state manager (per-user state, persisted in Redis)
+	stateManager, err := state.NewStateManager(ctx)
+	if err != nil {
+		slog.Error("Failed to connect to state manager", "error", err)
+		// Continue with nil state manager - endpoints handle this gracefully
+	}
+
 	router := gin.New()
 
 	// Add essential middleware
@@ -44,7 +53,7 @@ func NewServer(port string) (*Server, error) {
 	router.Use(corsMiddleware())
 
 	// Setup all routes with dependencies
-	endpoints.SetupRoutes(router, jobQueue)
+	endpoints.SetupRoutes(router, jobQueue, stateManager)
 
 	// Create HTTP server
 	httpServer := &http.Server{
@@ -56,9 +65,10 @@ func NewServer(port string) (*Server, error) {
 	}
 
 	return &Server{
-		httpServer: httpServer,
-		router:     router,
-		queue:      jobQueue,
+		httpServer:   httpServer,
+		router:       router,
+		queue:        jobQueue,
+		stateManager: stateManager,
 	}, nil
 }
 
@@ -76,6 +86,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.queue != nil {
 		if err := s.queue.Close(); err != nil {
 			slog.Error("Failed to close queue", "error", err)
+		}
+	}
+
+	// Close state manager connection
+	if s.stateManager != nil {
+		if err := s.stateManager.Close(); err != nil {
+			slog.Error("Failed to close state manager", "error", err)
 		}
 	}
 
