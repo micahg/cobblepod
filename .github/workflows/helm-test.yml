@@ -35,3 +35,9 @@ jobs:
             -f ./chart/values-dev.yaml \
             --set auth0.backend.clientSecret="dummy-secret" \
             --debug
+
+      - name: Helm Template (Talos dev)
+        run: |
+          helm template cobblepod ./chart \
+            -f ./chart/values-talos-dev.yaml \
+            --debug
