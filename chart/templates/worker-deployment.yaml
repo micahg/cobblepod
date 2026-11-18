@@ -56,16 +56,24 @@ spec:
         protocol: ANY
       rules:
         dns:
-        - matchName: {{ .Values.auth0.domain }}
-        - matchPattern: "*.googleapis.com"
-        - matchName: accounts.google.com
-        - matchPattern: "**.cluster.local"
-  - toFQDNs:
-    - matchName: {{ .Values.auth0.domain }}
-    - matchPattern: "*.googleapis.com"
-    - matchPattern: "accounts.google.com"
+        # The worker downloads podcasts from arbitrary hosts, so any name may be resolved.
+        - matchPattern: "*"
+  # Podcast feeds and audio come from arbitrary hosts (plus Auth0 and Google), so allow web
+  # traffic to the internet but never to private, link-local or loopback ranges. The URLs are
+  # user-supplied, so this keeps the worker away from the LAN, the node and metadata services.
+  - toCIDRSet:
+    - cidr: 0.0.0.0/0
+      except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16
+      - 100.64.0.0/10
+      - 127.0.0.0/8
     toPorts:
     - ports:
+      - port: "80"
+        protocol: TCP
       - port: "443"
         protocol: TCP
   - toEndpoints:
