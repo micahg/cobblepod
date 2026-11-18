@@ -85,9 +85,11 @@ spec:
       rules:
         dns:
         - matchName: {{ .Values.auth0.domain }}
+        - matchPattern: "*.googleapis.com"
         - matchPattern: "**.cluster.local"
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
+    - matchPattern: "*.googleapis.com"
     toPorts:
     - ports:
       - port: "443"
