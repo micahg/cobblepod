@@ -59,7 +59,7 @@ spec:
         - matchName: {{ .Values.auth0.domain }}
         - matchPattern: "*.googleapis.com"
         - matchName: accounts.google.com
-        - matchPattern: "*.cluster.local"
+        - matchPattern: "**.cluster.local"
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
     - matchPattern: "*.googleapis.com"

@@ -85,7 +85,7 @@ spec:
       rules:
         dns:
         - matchName: {{ .Values.auth0.domain }}
-        - matchPattern: "*.cluster.local"
+        - matchPattern: "**.cluster.local"
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
     toPorts:
