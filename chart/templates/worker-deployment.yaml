@@ -56,7 +56,10 @@ spec:
         protocol: ANY
       rules:
         dns:
-        - matchPattern: "*"
+        - matchName: {{ .Values.auth0.domain }}
+        - matchPattern: "*.googleapis.com"
+        - matchName: accounts.google.com
+        - matchPattern: "*.cluster.local"
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
     - matchPattern: "*.googleapis.com"

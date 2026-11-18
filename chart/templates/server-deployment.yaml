@@ -84,7 +84,8 @@ spec:
         protocol: ANY
       rules:
         dns:
-        - matchPattern: "*"
+        - matchName: {{ .Values.auth0.domain }}
+        - matchPattern: "*.cluster.local"
   - toFQDNs:
     - matchName: {{ .Values.auth0.domain }}
     toPorts:
