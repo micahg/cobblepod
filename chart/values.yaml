@@ -1,5 +1,10 @@
 namespace: cobblepod-prod
 
+# Set ingressEnabled to false when traffic arrives some other way (the Cloudflare Tunnel on Talos),
+# and createSecrets to false when cobblepod-secrets is supplied by a SealedSecret.
+ingressEnabled: true
+createSecrets: true
+
 ui:
   image:
     repository: mfg81/cobblepod-ui

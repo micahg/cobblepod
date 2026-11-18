@@ -1,0 +1,35 @@
+# Dev on the Talos cluster, deployed by Argo CD (micahg/talos-cluster, app "cobblepod").
+# Image tags are bumped by the release workflow through a pull request.
+# cobblepod-secrets (auth0-client-secret) is a SealedSecret applied by the cobblepod-secrets app.
+namespace: cobblepod-dev
+
+# Traffic arrives through the Cloudflare Tunnel (cloudflared namespace), not an ingress controller.
+ingressEnabled: false
+createSecrets: false
+ingressNamespace: cloudflared
+
+ui:
+  image:
+    tag: "0.2.0"
+  ingress:
+    host: cobblepod.steakholdermeating.com
+
+server:
+  image:
+    tag: "0.2.0"
+
+worker:
+  image:
+    tag: "0.2.0"
+
+valkey:
+  image:
+    tag: "8.1.11"
+
+auth0:
+  domain: "cobblepod-dev.ca.auth0.com"
+  audience: "http://localhost:8080/api"
+  frontend:
+    clientId: "c7bdNi9XN7OedT6HNYHIF20bpFNbLuQF"
+  backend:
+    clientId: "2rWB4CHHvd27hHshxCKC8WdzKKU2t5Ae"
