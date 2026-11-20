@@ -30,10 +30,11 @@ jobs:
             --debug
 
       - name: Helm Template (Development)
+        # the image tags live in micahg/talos-cluster envs/dev/cobblepod.yaml; --set stands in here
         run: |
           helm template cobblepod ./chart \
             -f ./chart/values-dev.yaml \
-            --set auth0.backend.clientSecret="dummy-secret" \
+            --set ui.image.tag=CI_VALUE --set server.image.tag=CI_VALUE --set worker.image.tag=CI_VALUE \
             --debug
 
       - name: Helm Template (Talos dev)

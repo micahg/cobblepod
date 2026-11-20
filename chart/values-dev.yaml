@@ -1,10 +1,22 @@
+# Dev on the Talos cluster, deployed by Argo CD (micahg/talos-cluster, app "cobblepod").
+# The image tags of ui, server and worker are NOT here: they live in
+# micahg/talos-cluster envs/dev/cobblepod.yaml, bumped by the release workflow through a
+# pull request there. For a local render pass them with --set.
+# cobblepod-secrets (auth0-client-secret) is a SealedSecret applied by the cobblepod-secrets app.
 namespace: cobblepod-dev
+
+# Traffic arrives through the Cloudflare Tunnel (cloudflared namespace), not an ingress controller.
+ingressEnabled: false
+createSecrets: false
+ingressNamespace: cloudflared
 
 ui:
   ingress:
     host: cobblepod.steakholdermeating.com
 
-ingressNamespace: ingress
+valkey:
+  image:
+    tag: "8.1.11"
 
 auth0:
   domain: "cobblepod-dev.ca.auth0.com"
