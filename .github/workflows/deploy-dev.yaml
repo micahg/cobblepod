@@ -1,0 +1,90 @@
+name: Deploy Dev
+run-name: Deploy dev (cobblepod ${{ inputs.version }})
+# Dev runs on the Talos cluster and is deployed by Argo CD. CI never touches the cluster: it only
+# bumps the image tags in envs/dev/cobblepod.yaml of the micahg/talos-cluster repo through a PR
+# that merges itself, and Argo CD picks the change up (about 3 minutes). Needs the repository
+# secret TALOS_CLUSTER_TOKEN (write access to contents and pull requests on talos-cluster only).
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image version for ui, server and worker, e.g. 0.3.0 (a leading v is fine)
+        required: true
+        type: string
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.TALOS_CLUSTER_TOKEN }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Token
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "::error::secret TALOS_CLUSTER_TOKEN is not set"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: micahg/talos-cluster
+          ref: main
+          path: cluster
+          token: ${{ secrets.TALOS_CLUSTER_TOKEN }}
+      - name: Update Dev Tags
+        working-directory: cluster
+        run: |
+          set -euo pipefail
+          f=envs/dev/cobblepod.yaml
+          VERSION=${VERSION#v}
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version '$VERSION' is not x.y.z"; exit 1; }
+          export VERSION
+          yq -i '.ui.image.tag = strenv(VERSION) | .server.image.tag = strenv(VERSION) | .worker.image.tag = strenv(VERSION)' "$f"
+          for k in ui server worker; do
+            [ "$(yq ".$k.image.tag" "$f")" = "$VERSION" ] || { echo "::error::could not set $k"; exit 1; }
+          done
+          git diff -- "$f"
+      - name: Validate Chart
+        run: helm template cobblepod chart -f chart/values-dev.yaml -f cluster/envs/dev/cobblepod.yaml > /dev/null
+      - name: Open PR And Merge
+        working-directory: cluster
+        run: |
+          set -euo pipefail
+          f=envs/dev/cobblepod.yaml
+          VERSION=${VERSION#v}
+          if git diff --quiet -- "$f"; then
+            echo "Dev is already at $VERSION, nothing to do." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # anything still open from an earlier run is superseded by this one
+          for n in $(gh pr list -R micahg/talos-cluster --state open --json number,headRefName \
+              --jq '.[] | select(.headRefName | startswith("deploy/cobblepod-dev-")) | .number'); do
+            gh pr close "$n" -R micahg/talos-cluster --delete-branch --comment "Superseded by run $GITHUB_RUN_ID."
+          done
+          BRANCH="deploy/cobblepod-dev-${GITHUB_RUN_ID}"
+          TITLE="chore: deploy cobblepod to dev ($VERSION)"
+          git checkout -b "$BRANCH"
+          git add "$f"
+          git commit -m "$TITLE"
+          git push origin "$BRANCH"
+          gh pr create -R micahg/talos-cluster --base main --head "$BRANCH" --title "$TITLE" \
+            --body "Automated bump of \`$f\` from micahg/cobblepod run $GITHUB_RUN_ID. Argo CD deploys it to dev after the merge."
+          for i in 1 2 3; do
+            if gh pr merge "$BRANCH" -R micahg/talos-cluster --squash; then
+              echo "Merged $BRANCH. Argo CD will deploy it to dev shortly." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            gh pr update-branch "$BRANCH" -R micahg/talos-cluster || true
+            sleep 15
+          done
+          echo "::error::could not merge $BRANCH"
+          exit 1
