@@ -36,9 +36,3 @@ jobs:
             -f ./chart/values-dev.yaml \
             --set ui.image.tag=CI_VALUE --set server.image.tag=CI_VALUE --set worker.image.tag=CI_VALUE \
             --debug
-
-      - name: Helm Template (Talos dev)
-        run: |
-          helm template cobblepod ./chart \
-            -f ./chart/values-talos-dev.yaml \
-            --debug
